@@ -100,10 +100,11 @@ class ResumeCollection:
         for rel, (meta, text) in self._index.items():
             if doc_type and meta.doc_type != doc_type:
                 continue
-            matches = list(pattern.finditer(text))
-            if not matches:
+            it = pattern.finditer(text)
+            m = next(it, None)
+            if m is None:
                 continue
-            m = matches[0]
+            match_count = 1 + sum(1 for _ in it)
             start = max(0, m.start() - 100)
             end = min(len(text), m.end() + 100)
             snippet = text[start:end].strip()
@@ -112,6 +113,6 @@ class ResumeCollection:
                 filename=meta.filename,
                 doc_type=meta.doc_type,
                 snippet=snippet,
-                match_count=len(matches),
+                match_count=match_count,
             ))
         return sorted(results, key=lambda r: r.match_count, reverse=True)
