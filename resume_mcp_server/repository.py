@@ -15,11 +15,22 @@ class ResumeRepository:
         self._work_experiences: list[WorkExperienceModel] = []
         self._resumes: list[ResumeModel] = []
 
+        self._badge_skills_by_id: dict[ID, BadgeSkillModel] = {}
+        self._achievements_by_id: dict[ID, AchievementModel] = {}
+        self._work_experiences_by_id: dict[ID, WorkExperienceModel] = {}
+        self._resumes_by_id: dict[ID, ResumeModel] = {}
+        self._badge_skills_by_title: dict[str, BadgeSkillModel] = {}
+
     def clear(self) -> None:
         self._badge_skills.clear()
         self._achievements.clear()
         self._work_experiences.clear()
         self._resumes.clear()
+        self._badge_skills_by_id.clear()
+        self._achievements_by_id.clear()
+        self._work_experiences_by_id.clear()
+        self._resumes_by_id.clear()
+        self._badge_skills_by_title.clear()
 
     # ── Model → Response ─────────────────────────────────────────────────────
 
@@ -30,11 +41,10 @@ class ResumeRepository:
         return AchievementResponse(id=m.id, created_at=m.created_at, desc=m.desc)
 
     def _work_experience_to_response(self, m: WorkExperienceModel) -> WorkExperienceResponse:
-        idx = {a.id: a for a in self._achievements}
         achievements = [
-            self._achievement_to_response(idx[aid])
+            self._achievement_to_response(self._achievements_by_id[aid])
             for aid in m.achievements
-            if aid in idx
+            if aid in self._achievements_by_id
         ]
         return WorkExperienceResponse(
             id=m.id, created_at=m.created_at,
@@ -44,17 +54,15 @@ class ResumeRepository:
         )
 
     def _resume_to_response(self, m: ResumeModel) -> ResumeResponse:
-        we_idx = {w.id: w for w in self._work_experiences}
         work_experiences = [
-            self._work_experience_to_response(we_idx[wid])
+            self._work_experience_to_response(self._work_experiences_by_id[wid])
             for wid in m.work_experiences
-            if wid in we_idx
+            if wid in self._work_experiences_by_id
         ]
-        bs_idx = {b.id: b for b in self._badge_skills}
         badge_skills = [
-            self._badge_skill_to_response(bs_idx[bid])
+            self._badge_skill_to_response(self._badge_skills_by_id[bid])
             for bid in m.badge_skills
-            if bid in bs_idx
+            if bid in self._badge_skills_by_id
         ]
         return ResumeResponse(
             id=m.id, created_at=m.created_at,
@@ -67,19 +75,20 @@ class ResumeRepository:
     # ── Internal add helpers ──────────────────────────────────────────────────
 
     def _add_badge_skill(self, create: BadgeSkillCreate) -> BadgeSkillModel:
-        existing = next(
-            (b for b in self._badge_skills if b.title.lower() == create.title.lower()),
-            None,
-        )
+        key = create.title.lower()
+        existing = self._badge_skills_by_title.get(key)
         if existing:
             return existing
         model = BadgeSkillModel(id=generate_id(), created_at=utc_now(), title=create.title)
         self._badge_skills.append(model)
+        self._badge_skills_by_id[model.id] = model
+        self._badge_skills_by_title[key] = model
         return model
 
     def _add_achievement(self, create: AchievementCreate) -> AchievementModel:
         model = AchievementModel(id=generate_id(), created_at=utc_now(), desc=create.desc)
         self._achievements.append(model)
+        self._achievements_by_id[model.id] = model
         return model
 
     def _add_work_experience(self, create: WorkExperienceCreate) -> WorkExperienceModel:
@@ -91,6 +100,7 @@ class ResumeRepository:
             achievements=achievement_ids,
         )
         self._work_experiences.append(model)
+        self._work_experiences_by_id[model.id] = model
         return model
 
     # ── Public add ───────────────────────────────────────────────────────────
@@ -106,24 +116,25 @@ class ResumeRepository:
             work_experiences=work_experience_ids, badge_skills=badge_skill_ids,
         )
         self._resumes.append(model)
+        self._resumes_by_id[model.id] = model
         return self._resume_to_response(model)
 
     # ── Find by ID ────────────────────────────────────────────────────────────
 
     def find_resume(self, id: ID) -> ResumeResponse | None:
-        m = next((r for r in self._resumes if r.id == id), None)
+        m = self._resumes_by_id.get(id)
         return self._resume_to_response(m) if m else None
 
     def find_achievement(self, id: ID) -> AchievementResponse | None:
-        m = next((a for a in self._achievements if a.id == id), None)
+        m = self._achievements_by_id.get(id)
         return self._achievement_to_response(m) if m else None
 
     def find_work_experience(self, id: ID) -> WorkExperienceResponse | None:
-        m = next((w for w in self._work_experiences if w.id == id), None)
+        m = self._work_experiences_by_id.get(id)
         return self._work_experience_to_response(m) if m else None
 
     def find_badge_skill(self, id: ID) -> BadgeSkillResponse | None:
-        m = next((b for b in self._badge_skills if b.id == id), None)
+        m = self._badge_skills_by_id.get(id)
         return self._badge_skill_to_response(m) if m else None
 
     # ── List all ──────────────────────────────────────────────────────────────
@@ -134,38 +145,37 @@ class ResumeRepository:
     def list_achievements(self, resume_id: ID | None = None) -> list[AchievementResponse]:
         if resume_id is None:
             return [self._achievement_to_response(a) for a in self._achievements]
-        resume = next((r for r in self._resumes if r.id == resume_id), None)
+        resume = self._resumes_by_id.get(resume_id)
         if not resume:
             return []
         we_ids = set(resume.work_experiences)
         achievement_ids: set[ID] = set()
-        for w in self._work_experiences:
-            if w.id in we_ids:
+        for wid in we_ids:
+            w = self._work_experiences_by_id.get(wid)
+            if w:
                 achievement_ids.update(w.achievements)
         return [self._achievement_to_response(a) for a in self._achievements if a.id in achievement_ids]
 
     def list_work_experiences(self, resume_id: ID | None = None) -> list[WorkExperienceResponse]:
         if resume_id is None:
             return [self._work_experience_to_response(w) for w in self._work_experiences]
-        resume = next((r for r in self._resumes if r.id == resume_id), None)
+        resume = self._resumes_by_id.get(resume_id)
         if not resume:
             return []
-        we_idx = {w.id: w for w in self._work_experiences}
         return [
-            self._work_experience_to_response(we_idx[wid])
+            self._work_experience_to_response(self._work_experiences_by_id[wid])
             for wid in resume.work_experiences
-            if wid in we_idx
+            if wid in self._work_experiences_by_id
         ]
 
     def list_badge_skills(self, resume_id: ID | None = None) -> list[BadgeSkillResponse]:
         if resume_id is None:
             return [self._badge_skill_to_response(b) for b in self._badge_skills]
-        resume = next((r for r in self._resumes if r.id == resume_id), None)
+        resume = self._resumes_by_id.get(resume_id)
         if not resume:
             return []
-        bs_idx = {b.id: b for b in self._badge_skills}
         return [
-            self._badge_skill_to_response(bs_idx[bid])
+            self._badge_skill_to_response(self._badge_skills_by_id[bid])
             for bid in resume.badge_skills
-            if bid in bs_idx
+            if bid in self._badge_skills_by_id
         ]
