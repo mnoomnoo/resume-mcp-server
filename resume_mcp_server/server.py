@@ -11,33 +11,63 @@ from fastmcp import FastMCP
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
-from .collection import ResumeCollection
+from .collection import ResumeCollection, SUPPORTED_EXTENSIONS
 from .repository import ResumeRepository
 
 logger = logging.getLogger(__name__)
 
 _collection: ResumeCollection | None = None
-_reload_pending = False
 
 RESUME_DIR = Path(os.environ.get("RESUME_DIR", Path.home() / "resumes"))
 
 
-def _do_reload() -> None:
-    global _reload_pending
-    _reload_pending = False
-    if _collection is not None:
-        count = _collection.load()
-        logger.info("Reloaded %d documents (file change detected)", count)
-
-
 class _ReloadHandler(FileSystemEventHandler):
-    def on_any_event(self, event) -> None:
-        global _reload_pending
-        if event.is_directory or _collection is None:
-            return
-        if not _reload_pending:
-            _reload_pending = True
-            threading.Timer(2.0, _do_reload).start()
+    def __init__(self) -> None:
+        super().__init__()
+        self._lock = threading.Lock()
+        self._timer: threading.Timer | None = None
+
+    def _is_relevant(self, path: str) -> bool:
+        return Path(path).suffix.lower() in SUPPORTED_EXTENSIONS
+
+    def _schedule(self) -> None:
+        with self._lock:
+            if self._timer is not None:
+                self._timer.cancel()
+            self._timer = threading.Timer(2.0, self._reload)
+            self._timer.daemon = True
+            self._timer.start()
+
+    def _reload(self) -> None:
+        with self._lock:
+            self._timer = None
+        if _collection is not None:
+            count = _collection.load()
+            logger.info("Reloaded %d documents (file change detected)", count)
+
+    def cancel(self) -> None:
+        with self._lock:
+            if self._timer is not None:
+                self._timer.cancel()
+                self._timer = None
+
+    def on_modified(self, event) -> None:
+        if not event.is_directory and self._is_relevant(event.src_path):
+            self._schedule()
+
+    def on_created(self, event) -> None:
+        if not event.is_directory and self._is_relevant(event.src_path):
+            self._schedule()
+
+    def on_deleted(self, event) -> None:
+        if not event.is_directory and self._is_relevant(event.src_path):
+            self._schedule()
+
+    def on_moved(self, event) -> None:
+        src_ok = not event.is_directory and self._is_relevant(event.src_path)
+        dst_ok = self._is_relevant(getattr(event, "dest_path", ""))
+        if src_ok or dst_ok:
+            self._schedule()
 
 
 @asynccontextmanager
@@ -47,14 +77,16 @@ async def lifespan(server: FastMCP):
     count = _collection.load()
     logger.info("Loaded %d documents from %s", count, RESUME_DIR)
 
+    handler = _ReloadHandler()
     observer = Observer()
-    observer.schedule(_ReloadHandler(), str(RESUME_DIR), recursive=True)
+    observer.schedule(handler, str(RESUME_DIR), recursive=True)
     observer.start()
 
     yield
 
     observer.stop()
     observer.join()
+    handler.cancel()
     _collection = None
 
 
