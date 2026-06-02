@@ -133,6 +133,16 @@ resume-mcp-server
 RESUME_DIR=/path/to/docs resume-mcp-server
 ```
 
+Or create a `.env` file in the directory you run the server from:
+
+```bash
+# .env
+RESUME_DIR=/path/to/docs
+FASTMCP_PORT=8001
+```
+
+Then just run `resume-mcp-server` — the `.env` is loaded automatically. Variables already set in your shell or by the MCP client always take precedence over `.env` values.
+
 ### Connect your AI client (stdio)
 
 **Claude Desktop**:
@@ -186,11 +196,16 @@ claude mcp add resume-collection resume-mcp-server -e RESUME_DIR=/path/to/your/r
 | `FASTMCP_PORT` | Port the HTTP server listens on (default `8001`) |
 | `LOG_LEVEL` | Logging verbosity: `DEBUG`, `INFO`, `WARNING`, `ERROR` (default `INFO`) |
 
-**Local run** (environment variables):
+**Local run** (environment variables or `.env`):
 
 | Variable | Default | Description |
 |---|---|---|
 | `RESUME_DIR` | `~/resumes` | Directory scanned for documents |
+| `FASTMCP_TRANSPORT` | `http` | Transport protocol (`http` or `stdio`) |
+| `FASTMCP_HOST` | `0.0.0.0` | Bind address |
+| `FASTMCP_PORT` | `8001` | Port the HTTP server listens on |
+
+A `.env` file in the working directory is loaded automatically on startup if present. Shell environment variables and values set by the MCP client always take precedence over `.env` values.
 
 The server scans `RESUME_DIR` recursively on startup and reloads automatically when files change.
 

@@ -11,8 +11,12 @@ from fastmcp import FastMCP
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
+from dotenv import load_dotenv
+
 from .collection import ResumeCollection, SUPPORTED_EXTENSIONS
 from .repository import ResumeRepository
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
