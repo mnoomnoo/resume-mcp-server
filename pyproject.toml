@@ -2,13 +2,25 @@
 name = "resume-mcp-server"
 version = "0.1.0"
 description = "MCP server for browsing and searching job application documents"
+readme = "README.md"
+license = {file = "LICENSE"}
 requires-python = ">=3.12"
+keywords = ["mcp", "model-context-protocol", "resume", "claude", "ai", "fastmcp"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+]
 dependencies = [
     "fastmcp>=2.0.0",
     "python-docx>=1.0.0",
     "pdfplumber>=0.11.0",
     "watchdog>=4.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/mnoomnoo/resume-mcp-server"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
@@ -17,5 +29,5 @@ dev = ["pytest>=8.0"]
 resume-mcp-server = "resume_mcp_server.server:main"
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
