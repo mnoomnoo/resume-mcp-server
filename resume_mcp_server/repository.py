@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from .models import (
     ID, generate_id, utc_now,
     BadgeSkillModel, AchievementModel, WorkExperienceModel, ResumeModel,
@@ -20,6 +22,7 @@ class ResumeRepository:
         self._work_experiences_by_id: dict[ID, WorkExperienceModel] = {}
         self._resumes_by_id: dict[ID, ResumeModel] = {}
         self._badge_skills_by_title: dict[str, BadgeSkillModel] = {}
+        self._work_experience_to_resume: dict[ID, ID] = {}
 
     def clear(self) -> None:
         self._badge_skills.clear()
@@ -31,6 +34,7 @@ class ResumeRepository:
         self._work_experiences_by_id.clear()
         self._resumes_by_id.clear()
         self._badge_skills_by_title.clear()
+        self._work_experience_to_resume.clear()
 
     # ── Model → Response ─────────────────────────────────────────────────────
 
@@ -117,6 +121,8 @@ class ResumeRepository:
         )
         self._resumes.append(model)
         self._resumes_by_id[model.id] = model
+        for wid in work_experience_ids:
+            self._work_experience_to_resume[wid] = model.id
         return self._resume_to_response(model)
 
     # ── Find by ID ────────────────────────────────────────────────────────────
@@ -179,3 +185,31 @@ class ResumeRepository:
             for bid in resume.badge_skills
             if bid in self._badge_skills_by_id
         ]
+
+    # ── Search ────────────────────────────────────────────────────────────────
+
+    def search_badge_skills(self, query: str) -> list[BadgeSkillResponse]:
+        pattern = re.compile(re.escape(query), re.IGNORECASE)
+        return [
+            self._badge_skill_to_response(s)
+            for s in self._badge_skills
+            if pattern.search(s.title)
+        ]
+
+    def search_work_experiences(self, query: str) -> list[dict]:
+        pattern = re.compile(re.escape(query), re.IGNORECASE)
+        results = []
+        for we in self._work_experiences:
+            if pattern.search(we.company_name) or pattern.search(we.position_title):
+                hit = True
+            else:
+                hit = any(
+                    (ach := self._achievements_by_id.get(aid)) is not None
+                    and pattern.search(ach.desc)
+                    for aid in we.achievements
+                )
+            if hit:
+                result = self._work_experience_to_response(we).model_dump()
+                result["resume_id"] = self._work_experience_to_resume.get(we.id)
+                results.append(result)
+        return results

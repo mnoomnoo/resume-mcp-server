@@ -164,6 +164,28 @@ def search_resumes(query: str, doc_type: str | None = None) -> list[dict[str, An
 
 
 @mcp.tool()
+def search_skills(query: str) -> list[dict[str, Any]]:
+    """Search badge skills by title keyword.
+
+    Args:
+        query: Text to search for in skill titles (case-insensitive)
+    """
+    return [s.model_dump() for s in _get_repo().search_badge_skills(query)]
+
+
+@mcp.tool()
+def search_work_experiences(query: str) -> list[dict[str, Any]]:
+    """Search work experiences by company name, position title, or achievement descriptions.
+
+    Each result includes a resume_id field identifying which resume the experience belongs to.
+
+    Args:
+        query: Text to search for (case-insensitive)
+    """
+    return _get_repo().search_work_experiences(query)
+
+
+@mcp.tool()
 def list_work_experiences(resume_id: str | None = None) -> list[dict[str, Any]]:
     """List work experiences, optionally filtered to a specific resume.
 

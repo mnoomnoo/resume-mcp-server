@@ -231,6 +231,117 @@ def test_find_badge_skill_unknown_returns_none():
     assert repo.find_badge_skill("bad-id") is None
 
 
+# ── search_badge_skills ───────────────────────────────────────────────────────
+
+def test_search_badge_skills_returns_match():
+    repo = ResumeRepository()
+    repo.add_resume(_make_resume(skills=["Python", "Go", "Rust"]))
+    results = repo.search_badge_skills("python")
+    assert len(results) == 1
+    assert results[0].title == "Python"
+
+
+def test_search_badge_skills_case_insensitive():
+    repo = ResumeRepository()
+    repo.add_resume(_make_resume(skills=["TypeScript"]))
+    assert len(repo.search_badge_skills("typescript")) == 1
+    assert len(repo.search_badge_skills("TYPESCRIPT")) == 1
+
+
+def test_search_badge_skills_no_match():
+    repo = ResumeRepository()
+    repo.add_resume(_make_resume(skills=["Python"]))
+    assert repo.search_badge_skills("Java") == []
+
+
+def test_search_badge_skills_partial_match():
+    repo = ResumeRepository()
+    repo.add_resume(_make_resume(skills=["JavaScript", "TypeScript", "Go"]))
+    results = repo.search_badge_skills("script")
+    assert {s.title for s in results} == {"JavaScript", "TypeScript"}
+
+
+# ── search_work_experiences ───────────────────────────────────────────────────
+
+def test_search_work_experiences_by_company():
+    repo = ResumeRepository()
+    resp = repo.add_resume(_make_resume(companies=["Acme", "Globex"]))
+    results = repo.search_work_experiences("Acme")
+    assert len(results) == 1
+    assert results[0]["company_name"] == "Acme"
+    assert results[0]["resume_id"] == resp.id
+
+
+def test_search_work_experiences_by_position():
+    repo = ResumeRepository()
+    we = WorkExperienceCreate(
+        company_name="Initech",
+        position_title="Senior Software Engineer",
+        start_date="Jan 2022",
+        end_date="Present",
+        achievements=[AchievementCreate(desc="Built pipelines")],
+    )
+    resume = ResumeCreate(
+        first_name="Jane", last_name="Doe",
+        email="jane@example.com", phone_num="555-555-5555",
+        address="Portland, OR", professional_statement="",
+        education="", work_experiences=[we], badge_skills=[],
+    )
+    resp = repo.add_resume(resume)
+    results = repo.search_work_experiences("Senior")
+    assert len(results) == 1
+    assert results[0]["position_title"] == "Senior Software Engineer"
+    assert results[0]["resume_id"] == resp.id
+
+
+def test_search_work_experiences_by_achievement():
+    repo = ResumeRepository()
+    we = WorkExperienceCreate(
+        company_name="Vandelay",
+        position_title="Engineer",
+        start_date="Jan 2021",
+        end_date="Dec 2023",
+        achievements=[AchievementCreate(desc="Reduced latency by 40%")],
+    )
+    resume = ResumeCreate(
+        first_name="Art", last_name="Vandelay",
+        email="art@example.com", phone_num="555-555-5555",
+        address="New York, NY", professional_statement="",
+        education="", work_experiences=[we], badge_skills=[],
+    )
+    resp = repo.add_resume(resume)
+    results = repo.search_work_experiences("latency")
+    assert len(results) == 1
+    assert results[0]["resume_id"] == resp.id
+    assert any(a["desc"] == "Reduced latency by 40%" for a in results[0]["achievements"])
+
+
+def test_search_work_experiences_no_match():
+    repo = ResumeRepository()
+    repo.add_resume(_make_resume(companies=["Acme"]))
+    assert repo.search_work_experiences("Nonexistent Corp") == []
+
+
+def test_search_work_experiences_resume_id_present():
+    repo = ResumeRepository()
+    resp_a = repo.add_resume(_make_resume("Alice", "A", companies=["Alpha Corp"]))
+    resp_b = repo.add_resume(_make_resume("Bob", "B", companies=["Beta Corp"]))
+    results = repo.search_work_experiences("Corp")
+    resume_ids = {r["resume_id"] for r in results}
+    assert resume_ids == {resp_a.id, resp_b.id}
+
+
+def test_search_work_experiences_does_not_mix_jobs():
+    repo = ResumeRepository()
+    resp_a = repo.add_resume(_make_resume("Alice", "A", companies=["Acme"]))
+    resp_b = repo.add_resume(_make_resume("Bob", "B", companies=["Acme"]))
+    results = repo.search_work_experiences("Acme")
+    # Both resumes have an Acme entry — they should appear as separate results
+    assert len(results) == 2
+    assert results[0]["resume_id"] != results[1]["resume_id"]
+    assert {r["resume_id"] for r in results} == {resp_a.id, resp_b.id}
+
+
 # ── clear ─────────────────────────────────────────────────────────────────────
 
 def test_clear_empties_all_stores():

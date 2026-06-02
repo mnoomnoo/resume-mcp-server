@@ -1,122 +1,41 @@
 # resume-mcp-server
 
-An MCP (Model Context Protocol) server for browsing and searching job application documents — resumes, cover letters, and related materials.
-
-## Features
-
-- **List** all documents in your collection, optionally filtered by type
-- **Read** the full text of any document
-- **Search** across all documents by keyword or phrase
+An MCP server for browsing and searching job application documents — resumes, cover letters, and related materials.
 
 Supports `.docx`, `.pdf`, `.md`, and `.txt` files, including nested subdirectories.
 
-## Prerequisites
+---
 
-**Option A — Docker (recommended):** Docker installed, no Python required.
+## Docker Deploy
 
-**Option B — Local:** Python 3.12+ and `pip`.
+The recommended way to run the server. Docker Compose exposes the server over HTTP so any AI client can connect to it.
 
-## Installation
+### 1. Set your resume directory
 
-### Docker
-
-```bash
-git clone <repo-url>
-cd resume-mcp-server
-docker build -t resume-mcp-server .
-```
-
-### Local
+Copy the example env file and set your documents path:
 
 ```bash
-git clone <repo-url>
-cd resume-mcp-server
-pip install .
+cp .env.example .env
+# then edit RESUME_DIR_HOST in .env
 ```
 
-## Configuration
-
-| Environment variable | Default | Description |
-|---|---|---|
-| `RESUME_DIR` | `~/resumes` | Path to your documents directory |
-
-The server recursively scans `RESUME_DIR` on startup and indexes all supported files.
-
-### Document type inference
-
-Types are inferred from filenames automatically:
-
-| Type | Filename patterns |
-|---|---|
-| `resume` | `resume`, `resume_` |
-| `cover_letter` | `cover letter`, `_cl.`, `coverletter` |
-| `application_material` | `interview`, `study guide`, `why_`, `application question`, `job desc` |
-| `other` | everything else |
-
-## Running the server
-
-### Docker
+### 2. Build and start
 
 ```bash
-docker run -i -v /path/to/your/resumes:/resumes resume-mcp-server
+docker compose build resume-mcp
+docker compose up -d
 ```
 
-The `-i` flag is required — MCP communicates over stdin/stdout. The `/resumes` mount path maps to `RESUME_DIR` inside the container (default `/resumes`).
+The server is now available at `http://localhost:8001/mcp`.
 
-To use a different internal path:
+### 3. Connect your AI client
 
-```bash
-docker run -i \
-  -v /path/to/your/resumes:/docs \
-  -e RESUME_DIR=/docs \
-  resume-mcp-server
-```
-
-### Local
-
-Requires `pip install .` first (adds `resume-mcp-server` to your PATH).
-
-```bash
-resume-mcp-server
-# with a custom directory:
-RESUME_DIR=/path/to/docs resume-mcp-server
-```
-
-## Docker Compose
-
-Run the resume server exposed over HTTP so any AI client can connect to it.
-
-### Prerequisites
-
-Set `RESUME_DIR_HOST` to the path of your documents directory on the host machine. The easiest way is a `.env` file in the project root:
-
-```bash
-echo 'RESUME_DIR_HOST=/path/to/your/resumes' > .env
-```
-
-### Starting
-
-```bash
-docker compose build resume-mcp   # build resume server image
-docker compose up -d              # start the server in the background
-```
-
-- Resume server: `http://localhost:8001/mcp`
-
-### Stopping
-
-```bash
-docker compose down
-```
-
-### AI client integration
-
-**Claude Desktop** (`claude_desktop_config.json`):
+**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
 
 ```json
 {
   "mcpServers": {
-    "resume-mcp-docker": {
+    "resume-collection": {
       "type": "http",
       "url": "http://localhost:8001/mcp"
     }
@@ -129,7 +48,7 @@ docker compose down
 ```json
 {
   "servers": {
-    "resume-mcp-docker": {
+    "resume-collection": {
       "type": "http",
       "url": "http://localhost:8001/mcp"
     }
@@ -140,29 +59,57 @@ docker compose down
 **Claude Code**:
 
 ```bash
-claude mcp add resume-mcp-docker --transport http http://localhost:8001/mcp
+claude mcp add resume-collection --transport http http://localhost:8001/mcp
 ```
 
-This writes to `~/.claude.json`. Do **not** add it to `~/.claude/settings.json` — that file is for permissions and preferences only, not MCP servers.
-
----
-
-## Claude Desktop integration
-
-### Docker
+To add it globally across all projects, add the following to `~/.claude.json` instead:
 
 ```json
 {
   "mcpServers": {
     "resume-collection": {
-      "command": "docker",
-      "args": ["run", "-i", "-v", "/path/to/your/resumes:/resumes", "resume-mcp-server"]
+      "type": "http",
+      "url": "http://localhost:8001/mcp"
     }
   }
 }
 ```
 
-### Local
+### Stopping
+
+```bash
+docker compose down
+```
+
+---
+
+## Dev Environment
+
+For local development or running the server without Docker.
+
+### Prerequisites
+
+Python 3.12+
+
+### Install
+
+```bash
+pip install .
+# include test dependencies:
+pip install ".[dev]"
+```
+
+### Run
+
+```bash
+resume-mcp-server
+# with a custom directory:
+RESUME_DIR=/path/to/docs resume-mcp-server
+```
+
+### Connect your AI client (stdio)
+
+**Claude Desktop**:
 
 ```json
 {
@@ -177,49 +124,56 @@ This writes to `~/.claude.json`. Do **not** add it to `~/.claude/settings.json` 
 }
 ```
 
-If `resume-mcp-server` is not on your `PATH`, use the full path to the installed script (e.g. `~/.venv/bin/resume-mcp-server`).
+If `resume-mcp-server` is not on your `PATH`, use the full path (e.g. `~/.venv/bin/resume-mcp-server`).
 
-## Claude Code integration
-
-### Docker
-
-```bash
-claude mcp add resume-collection -- docker run -i -v /path/to/your/resumes:/resumes resume-mcp-server
-```
-
-### Local
+**Claude Code**:
 
 ```bash
 claude mcp add resume-collection resume-mcp-server -e RESUME_DIR=/path/to/your/resumes
 ```
 
-If `resume-mcp-server` is not on your `PATH`, use the full path (e.g. `~/.venv/bin/resume-mcp-server`).
+---
 
-Both commands write to `~/.claude.json`. Do **not** add MCP servers to `~/.claude/settings.json` — that file is for permissions and preferences only.
+## Configuration
+
+**Docker Compose** (`.env`):
+
+| Variable | Description |
+|---|---|
+| `RESUME_DIR_HOST` | Path on your machine to the documents directory — mounted to `/resumes` inside the container |
+| `FASTMCP_PORT` | Port the HTTP server listens on (default `8001`) |
+| `LOG_LEVEL` | Logging verbosity: `DEBUG`, `INFO`, `WARNING`, `ERROR` (default `INFO`) |
+
+**Local run** (environment variables):
+
+| Variable | Default | Description |
+|---|---|---|
+| `RESUME_DIR` | `~/resumes` | Directory scanned for documents |
+
+The server scans `RESUME_DIR` recursively on startup and reloads automatically when files change.
+
+### Document type inference
+
+Types are inferred from filenames:
+
+| Type | Filename patterns |
+|---|---|
+| `resume` | contains `resume` |
+| `cover_letter` | `cover letter`, `_cl.`, `coverletter` |
+| `application_material` | `interview`, `study guide`, `why_`, `application question`, `job desc` |
+| `other` | everything else |
+
+---
 
 ## MCP Tools
 
 ### `list_resumes`
 
-List all documents in the collection.
+List all documents, optionally filtered by type.
 
 | Parameter | Type | Description |
 |---|---|---|
-| `doc_type` | `string` (optional) | Filter by type: `resume`, `cover_letter`, `application_material`, or `other` |
-
-Returns a list of objects:
-
-```json
-[
-  {
-    "path": "Acme/MyResume.docx",
-    "filename": "MyResume.docx",
-    "doc_type": "resume",
-    "modified": "2024-11-01T10:30:00",
-    "size_bytes": 42000
-  }
-]
-```
+| `doc_type` | string (optional) | `resume`, `cover_letter`, `application_material`, or `other` |
 
 ---
 
@@ -229,31 +183,96 @@ Return the full extracted text of a document.
 
 | Parameter | Type | Description |
 |---|---|---|
-| `path` | `string` | Relative path as returned by `list_resumes` |
-
-Returns a string with the document's text content.
+| `path` | string | Relative path as returned by `list_resumes` |
 
 ---
 
 ### `search_resumes`
 
-Search across all documents for a keyword or phrase (case-insensitive).
+Full-text search across all documents (case-insensitive), sorted by match count.
 
 | Parameter | Type | Description |
 |---|---|---|
-| `query` | `string` | Text to search for |
-| `doc_type` | `string` (optional) | Filter by type (same values as `list_resumes`) |
+| `query` | string | Text to search for |
+| `doc_type` | string (optional) | Filter by type (same values as `list_resumes`) |
 
-Returns results sorted by match count descending:
+---
 
-```json
-[
-  {
-    "path": "MyResume_v2.docx",
-    "filename": "MyResume_v2.docx",
-    "doc_type": "resume",
-    "match_count": 5,
-    "snippet": "...context around the first match..."
-  }
-]
-```
+### `search_skills`
+
+Search badge skills (technologies, tools, languages) by title.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `query` | string | Text to search for in skill titles (case-insensitive) |
+
+---
+
+### `search_work_experiences`
+
+Search work experiences by company name, position title, or achievement description bullets.
+Each result includes a `resume_id` field identifying which resume the entry belongs to.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `query` | string | Text to search for (case-insensitive) |
+
+---
+
+### `list_work_experiences`
+
+List work experience entries, optionally scoped to a single resume.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `resume_id` | string (optional) | Resume ID from `list_resumes` |
+
+---
+
+### `get_work_experience`
+
+Get a single work experience entry with its achievement bullets.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `id` | string | Work experience ID from `list_work_experiences` |
+
+---
+
+### `list_achievements`
+
+List all achievement bullets, optionally scoped to a single resume.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `resume_id` | string (optional) | Resume ID from `list_resumes` |
+
+---
+
+### `get_achievement`
+
+Get a single achievement bullet by ID.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `id` | string | Achievement ID from `list_achievements` |
+
+---
+
+### `list_badge_skills`
+
+List all badge skills, optionally scoped to a single resume.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `resume_id` | string (optional) | Resume ID from `list_resumes` |
+
+---
+
+### `get_badge_skill`
+
+Get a single badge skill by ID.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `id` | string | Badge skill ID from `list_badge_skills` |
