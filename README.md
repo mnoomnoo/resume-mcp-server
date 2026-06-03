@@ -5,6 +5,7 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 [![MCP](https://img.shields.io/badge/MCP-compatible-brightgreen)](https://modelcontextprotocol.io)
 [![PyPI](https://img.shields.io/pypi/v/resume-mcp-server)](https://pypi.org/project/resume-mcp-server/)
+[![resume-mcp-server MCP server](https://glama.ai/mcp/servers/mnoomnoo/resume-mcp-server/badges/score.svg)](https://glama.ai/mcp/servers/mnoomnoo/resume-mcp-server)
 
 An MCP server for browsing and searching job application documents — resumes, cover letters, and related materials.
 
@@ -108,6 +109,27 @@ To add it globally across all projects, add the following to `~/.claude.json` in
 docker compose down
 ```
 
+### Docker (stdio)
+
+Run the image directly — no Compose needed — for MCP clients that use stdio transport (including Glama.ai and Claude Desktop):
+
+```bash
+docker run -i --rm -v /path/to/your/resumes:/resumes resume-mcp-server
+```
+
+**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+
+```json
+{
+  "mcpServers": {
+    "resume-collection": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "-v", "/path/to/your/resumes:/resumes", "resume-mcp-server"]
+    }
+  }
+}
+```
+
 ---
 
 ## Dev Environment
@@ -202,7 +224,7 @@ claude mcp add resume-collection resume-mcp-server -e RESUME_DIR=/path/to/your/r
 | Variable | Default | Description |
 |---|---|---|
 | `RESUME_DIR` | `~/resumes` | Directory scanned for documents |
-| `FASTMCP_TRANSPORT` | `http` | Transport protocol (`http` or `stdio`) |
+| `FASTMCP_TRANSPORT` | `http` (local) / `stdio` (Docker image) | Transport protocol (`http` or `stdio`) |
 | `FASTMCP_HOST` | `0.0.0.0` | Bind address |
 | `FASTMCP_PORT` | `8001` | Port the HTTP server listens on |
 

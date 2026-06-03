@@ -132,6 +132,91 @@ class TestServerUninitialised(unittest.TestCase):
             search_resumes("query")
 
 
+# ── Empty directory ───────────────────────────────────────────────────────────
+
+
+class TestServerEmptyDir(unittest.TestCase):
+    """All server tools must return safe empty results when the resume directory is empty."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmpdir = tempfile.TemporaryDirectory()
+        collection = ResumeCollection(Path(cls._tmpdir.name))
+        collection.load()
+        cls._orig = _srv._collection
+        _srv._collection = collection
+
+    @classmethod
+    def tearDownClass(cls):
+        _srv._collection = cls._orig
+        cls._tmpdir.cleanup()
+
+    # ── collection-layer tools ─────────────────────────────────────────────────
+
+    def test_list_resumes_empty(self):
+        self.assertEqual(list_resumes(), [])
+
+    def test_list_resumes_resume_filter_empty(self):
+        self.assertEqual(list_resumes(doc_type="resume"), [])
+
+    def test_get_resume_unknown_path_returns_error(self):
+        result = get_resume("nonexistent.txt")
+        self.assertIsInstance(result, str)
+        self.assertIn("Error", result)
+
+    def test_search_resumes_empty(self):
+        self.assertEqual(search_resumes("python"), [])
+
+    # ── repository-layer tools ─────────────────────────────────────────────────
+
+    def test_list_resume_summaries_empty(self):
+        self.assertEqual(list_resume_summaries(), [])
+
+    def test_get_resume_profile_unknown_returns_error(self):
+        result = get_resume_profile("nonexistent-id")
+        self.assertIsInstance(result, str)
+        self.assertIn("Error", result)
+
+    def test_search_skills_empty(self):
+        self.assertEqual(search_skills("python"), [])
+
+    def test_search_work_experiences_empty(self):
+        self.assertEqual(search_work_experiences("engineer"), [])
+
+    def test_search_achievements_empty(self):
+        self.assertEqual(search_achievements("led"), [])
+
+    def test_search_resumes_by_name_empty(self):
+        self.assertEqual(search_resumes_by_name("Jane"), [])
+
+    def test_search_resumes_by_skill_empty(self):
+        self.assertEqual(search_resumes_by_skill("Docker"), [])
+
+    def test_list_work_experiences_empty(self):
+        self.assertEqual(list_work_experiences(), [])
+
+    def test_get_work_experience_unknown_returns_error(self):
+        result = get_work_experience("nonexistent-id")
+        self.assertIsInstance(result, str)
+        self.assertIn("Error", result)
+
+    def test_list_achievements_empty(self):
+        self.assertEqual(list_achievements(), [])
+
+    def test_get_achievement_unknown_returns_error(self):
+        result = get_achievement("nonexistent-id")
+        self.assertIsInstance(result, str)
+        self.assertIn("Error", result)
+
+    def test_list_badge_skills_empty(self):
+        self.assertEqual(list_badge_skills(), [])
+
+    def test_get_badge_skill_unknown_returns_error(self):
+        result = get_badge_skill("nonexistent-id")
+        self.assertIsInstance(result, str)
+        self.assertIn("Error", result)
+
+
 # ── Collection-layer tools ────────────────────────────────────────────────────
 
 

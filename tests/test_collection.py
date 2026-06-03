@@ -82,6 +82,38 @@ class TestDocTypeInference(unittest.TestCase):
         self.assertEqual(_infer_doc_type("references.docx"), "other")
 
 
+# ── collection loading with empty directory ───────────────────────────────────
+
+class TestCollectionLoadEmptyDir(unittest.TestCase):
+    """Collection loaded from an empty directory must report zero documents."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmpdir = tempfile.TemporaryDirectory()
+        cls.collection = ResumeCollection(Path(cls._tmpdir.name))
+        cls.count = cls.collection.load()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmpdir.cleanup()
+
+    def test_load_returns_zero(self):
+        self.assertEqual(self.count, 0)
+
+    def test_list_all_returns_empty(self):
+        self.assertEqual(self.collection.list_all(), [])
+
+    def test_list_all_with_doc_type_returns_empty(self):
+        self.assertEqual(self.collection.list_all(doc_type="resume"), [])
+
+    def test_search_returns_empty(self):
+        self.assertEqual(self.collection.search("anything"), [])
+
+    def test_get_text_raises_key_error(self):
+        with self.assertRaises(KeyError):
+            self.collection.get_text("nonexistent.txt")
+
+
 # ── collection loading with sample markdown files ─────────────────────────────
 
 class TestCollectionLoadSampleDir(unittest.TestCase):

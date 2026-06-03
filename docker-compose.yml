@@ -1,6 +1,8 @@
 services:
 
   resume-mcp:
+    container_name: resume-mcp-server
+    image: resume-mcp-server
     build:
       context: .
       dockerfile: Dockerfile
