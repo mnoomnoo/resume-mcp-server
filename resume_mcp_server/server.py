@@ -331,7 +331,10 @@ def main() -> None:
     transport = os.environ.get("FASTMCP_TRANSPORT", "stdio")
     host = os.environ.get("FASTMCP_HOST", "0.0.0.0")
     port = int(os.environ.get("FASTMCP_PORT", "8001"))
-    mcp.run(transport=transport, host=host, port=port)
+    if transport == "stdio":
+        mcp.run(transport=transport)
+    else:
+        mcp.run(transport=transport, host=host, port=port)
 
 
 if __name__ == "__main__":
