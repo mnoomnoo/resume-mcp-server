@@ -4,6 +4,7 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 [![MCP](https://img.shields.io/badge/MCP-compatible-brightgreen)](https://modelcontextprotocol.io)
+[![PyPI](https://img.shields.io/pypi/v/resume-mcp-server)](https://pypi.org/project/resume-mcp-server/)
 
 An MCP server for browsing and searching job application documents — resumes, cover letters, and related materials.
 
@@ -18,7 +19,7 @@ Give Claude structured access to your resume collection. The server parses your 
 **Try it immediately with the included sample resumes:**
 
 ```bash
-pip install .
+pip install resume-mcp-server
 RESUME_DIR=./sample_resumes resume-mcp-server
 ```
 
@@ -168,7 +169,7 @@ If `resume-mcp-server` is not on your `PATH`, use the full path (e.g. `~/.venv/b
 claude mcp add resume-collection resume-mcp-server -e RESUME_DIR=/path/to/your/resumes
 ```
 
-**uvx (coming soon — requires PyPI publish):**
+**uvx:**
 
 ```json
 {
