@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-import pytest
+import unittest
+
 from resume_mcp_server.parser import (
     _extract_contact,
     _find_sections,
@@ -13,204 +14,177 @@ from resume_mcp_server.parser import (
 
 # ── _find_sections ────────────────────────────────────────────────────────────
 
-def test_find_sections_basic():
-    lines = [
-        "Summary",
-        "Experienced engineer.",
-        "Experience",
-        "Acme Corp",
-        "Skills",
-        "Python, Rust",
-        "Education",
-        "BS Computer Science",
-    ]
-    sections = _find_sections(lines)
-    assert sections["summary"] == ["Experienced engineer."]
-    assert sections["experience"] == ["Acme Corp"]
-    assert sections["skills"] == ["Python, Rust"]
-    assert sections["education"] == ["BS Computer Science"]
+class TestFindSections(unittest.TestCase):
+    def test_basic(self):
+        lines = [
+            "Summary", "Experienced engineer.",
+            "Experience", "Acme Corp",
+            "Skills", "Python, Rust",
+            "Education", "BS Computer Science",
+        ]
+        sections = _find_sections(lines)
+        self.assertEqual(sections["summary"], ["Experienced engineer."])
+        self.assertEqual(sections["experience"], ["Acme Corp"])
+        self.assertEqual(sections["skills"], ["Python, Rust"])
+        self.assertEqual(sections["education"], ["BS Computer Science"])
 
+    def test_unknown_heading_ignored(self):
+        lines = ["References", "John Smith", "Skills", "Python"]
+        sections = _find_sections(lines)
+        self.assertNotIn("references", sections)
+        self.assertEqual(sections["skills"], ["Python"])
 
-def test_find_sections_unknown_heading_ignored():
-    lines = ["References", "John Smith", "Skills", "Python"]
-    sections = _find_sections(lines)
-    assert "references" not in sections
-    assert sections["skills"] == ["Python"]
+    def test_content_before_first_heading_discarded(self):
+        lines = ["Jane Doe", "jane@example.com", "Skills", "Python"]
+        sections = _find_sections(lines)
+        self.assertIn("skills", sections)
+        self.assertEqual(len(sections), 1)
 
+    def test_last_section_captured(self):
+        lines = ["Education", "BS Computer Science", "Minor in Mathematics"]
+        sections = _find_sections(lines)
+        self.assertEqual(sections["education"], ["BS Computer Science", "Minor in Mathematics"])
 
-def test_find_sections_content_before_first_heading_discarded():
-    lines = ["Jane Doe", "jane@example.com", "Skills", "Python"]
-    sections = _find_sections(lines)
-    assert "skills" in sections
-    assert len(sections) == 1
-
-
-def test_find_sections_last_section_captured():
-    lines = ["Education", "BS Computer Science", "Minor in Mathematics"]
-    sections = _find_sections(lines)
-    assert sections["education"] == ["BS Computer Science", "Minor in Mathematics"]
-
-
-def test_find_sections_alternate_headings():
-    lines = ["Work History", "Acme Corp", "Technical Skills", "Python"]
-    sections = _find_sections(lines)
-    assert "experience" in sections
-    assert "skills" in sections
+    def test_alternate_headings(self):
+        lines = ["Work History", "Acme Corp", "Technical Skills", "Python"]
+        sections = _find_sections(lines)
+        self.assertIn("experience", sections)
+        self.assertIn("skills", sections)
 
 
 # ── _extract_contact ──────────────────────────────────────────────────────────
 
-def test_extract_contact_full():
-    lines = [
-        "Jane Doe",
-        "Portland, OR",
-        "jane@example.com",
-        "503-555-1234",
-    ]
-    first, last, email, phone, address = _extract_contact(lines)
-    assert first == "Jane"
-    assert last == "Doe"
-    assert email == "jane@example.com"
-    assert "503-555-1234" in phone
-    assert "Portland" in address
+class TestExtractContact(unittest.TestCase):
+    def test_full(self):
+        lines = ["Jane Doe", "Portland, OR", "jane@example.com", "503-555-1234"]
+        first, last, email, phone, address = _extract_contact(lines)
+        self.assertEqual(first, "Jane")
+        self.assertEqual(last, "Doe")
+        self.assertEqual(email, "jane@example.com")
+        self.assertIn("503-555-1234", phone)
+        self.assertIn("Portland", address)
 
+    def test_job_title_line_not_picked_up_as_name(self):
+        lines = ["Software Engineer", "jane@example.com", "503-555-1234"]
+        first, last, email, phone, address = _extract_contact(lines)
+        self.assertTrue(first == "" or first.lower() not in ("software",))
 
-def test_extract_contact_name_with_job_title_skipped():
-    lines = [
-        "Software Engineer",
-        "jane@example.com",
-        "503-555-1234",
-    ]
-    first, last, email, phone, address = _extract_contact(lines)
-    # "Software Engineer" should not be picked up as name
-    assert first == "" or first.lower() not in ("software",)
+    def test_email_only(self):
+        lines = ["jane@example.com"]
+        first, last, email, phone, address = _extract_contact(lines)
+        self.assertEqual(email, "jane@example.com")
+        self.assertEqual(phone, "")
 
-
-def test_extract_contact_email_only():
-    lines = ["jane@example.com"]
-    first, last, email, phone, address = _extract_contact(lines)
-    assert email == "jane@example.com"
-    assert phone == ""
-
-
-def test_extract_contact_no_email_or_phone():
-    lines = ["Jane Doe", "Some Company"]
-    first, last, email, phone, address = _extract_contact(lines)
-    assert email == ""
-    assert phone == ""
+    def test_no_email_or_phone(self):
+        lines = ["Jane Doe", "Some Company"]
+        first, last, email, phone, address = _extract_contact(lines)
+        self.assertEqual(email, "")
+        self.assertEqual(phone, "")
 
 
 # ── _split_company_title ──────────────────────────────────────────────────────
 
-def test_split_pipe_separator():
-    assert _split_company_title("Acme Corp | Software Engineer") == (
-        "Acme Corp",
-        "Software Engineer",
-    )
+class TestSplitCompanyTitle(unittest.TestCase):
+    def test_pipe_separator(self):
+        self.assertEqual(
+            _split_company_title("Acme Corp | Software Engineer"),
+            ("Acme Corp", "Software Engineer"),
+        )
 
+    def test_middle_dot_reversed_order(self):
+        company, title = _split_company_title("Software Engineer · Acme Corp")
+        self.assertEqual(company, "Acme Corp")
+        self.assertEqual(title, "Software Engineer")
 
-def test_split_middle_dot_reversed_order():
-    # "Title · Company" → (company, title)
-    company, title = _split_company_title("Software Engineer · Acme Corp")
-    assert company == "Acme Corp"
-    assert title == "Software Engineer"
+    def test_comma_title_word(self):
+        company, title = _split_company_title("Acme Corp, Senior Developer")
+        self.assertEqual(company, "Acme Corp")
+        self.assertEqual(title, "Senior Developer")
 
-
-def test_split_comma_title_word():
-    company, title = _split_company_title("Acme Corp, Senior Developer")
-    assert company == "Acme Corp"
-    assert title == "Senior Developer"
-
-
-def test_split_no_separator():
-    company, title = _split_company_title("Acme Corp")
-    assert company == "Acme Corp"
-    assert title == ""
+    def test_no_separator(self):
+        company, title = _split_company_title("Acme Corp")
+        self.assertEqual(company, "Acme Corp")
+        self.assertEqual(title, "")
 
 
 # ── _parse_skills ─────────────────────────────────────────────────────────────
 
-def test_parse_skills_basic():
-    skills = _parse_skills(["Python, Rust, Go"])
-    titles = [s.title for s in skills]
-    assert "Python" in titles
-    assert "Rust" in titles
-    assert "Go" in titles
+class TestParseSkills(unittest.TestCase):
+    def test_basic(self):
+        skills = _parse_skills(["Python, Rust, Go"])
+        titles = [s.title for s in skills]
+        self.assertIn("Python", titles)
+        self.assertIn("Rust", titles)
+        self.assertIn("Go", titles)
 
+    def test_category_prefix_stripped(self):
+        skills = _parse_skills(["Languages: Python, Rust"])
+        titles = [s.title for s in skills]
+        self.assertNotIn("Languages", titles)
+        self.assertIn("Python", titles)
+        self.assertIn("Rust", titles)
 
-def test_parse_skills_category_prefix_stripped():
-    skills = _parse_skills(["Languages: Python, Rust"])
-    titles = [s.title for s in skills]
-    assert "Languages" not in titles
-    assert "Python" in titles
-    assert "Rust" in titles
+    def test_deduplication(self):
+        skills = _parse_skills(["Python, python, PYTHON"])
+        self.assertEqual(len(skills), 1)
+        self.assertEqual(skills[0].title, "Python")
 
+    def test_bullet_prefix_stripped(self):
+        skills = _parse_skills(["• Docker"])
+        self.assertEqual(skills[0].title, "Docker")
 
-def test_parse_skills_deduplication():
-    skills = _parse_skills(["Python, python, PYTHON"])
-    assert len(skills) == 1
-    assert skills[0].title == "Python"
+    def test_short_tokens_filtered(self):
+        skills = _parse_skills(["C, Go, Rust"])
+        titles = [s.title for s in skills]
+        self.assertNotIn("C", titles)
+        self.assertIn("Go", titles)
+        self.assertIn("Rust", titles)
 
-
-def test_parse_skills_bullet_prefix_stripped():
-    skills = _parse_skills(["• Docker"])
-    assert skills[0].title == "Docker"
-
-
-def test_parse_skills_short_tokens_filtered():
-    skills = _parse_skills(["C, Go, Rust"])
-    titles = [s.title for s in skills]
-    assert "C" not in titles  # length 1, filtered out
-    assert "Go" in titles
-    assert "Rust" in titles
-
-
-def test_parse_skills_semicolon_separator():
-    skills = _parse_skills(["Python; Rust; Go"])
-    assert len(skills) == 3
+    def test_semicolon_separator(self):
+        skills = _parse_skills(["Python; Rust; Go"])
+        self.assertEqual(len(skills), 3)
 
 
 # ── _parse_work_modern ────────────────────────────────────────────────────────
 
-def test_parse_work_modern_single_entry():
-    lines = [
-        "Acme Corp | Software Engineer  March 2022 – December 2025",
-        "• Built a distributed system that handles 10k requests/second",
-        "• Reduced latency by 40% through caching improvements",
-    ]
-    entries = _parse_work_modern(lines)
-    assert len(entries) == 1
-    assert entries[0].company_name == "Acme Corp"
-    assert entries[0].position_title == "Software Engineer"
-    assert entries[0].start_date == "March 2022"
-    assert entries[0].end_date == "December 2025"
-    assert len(entries[0].achievements) == 2
+class TestParseWorkModern(unittest.TestCase):
+    def test_single_entry(self):
+        lines = [
+            "Acme Corp | Software Engineer  March 2022 – December 2025",
+            "• Built a distributed system that handles 10k requests/second",
+            "• Reduced latency by 40% through caching improvements",
+        ]
+        entries = _parse_work_modern(lines)
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0].company_name, "Acme Corp")
+        self.assertEqual(entries[0].position_title, "Software Engineer")
+        self.assertEqual(entries[0].start_date, "March 2022")
+        self.assertEqual(entries[0].end_date, "December 2025")
+        self.assertEqual(len(entries[0].achievements), 2)
 
+    def test_two_entries_boundary(self):
+        lines = [
+            "Acme Corp | Software Engineer  March 2022 – December 2025",
+            "• Built distributed system handling large traffic volumes",
+            "Globex | Senior Engineer  January 2020 – February 2022",
+            "• Led rewrite of core authentication service used across org",
+        ]
+        entries = _parse_work_modern(lines)
+        self.assertEqual(len(entries), 2)
+        self.assertEqual(entries[0].company_name, "Acme Corp")
+        self.assertEqual(len(entries[0].achievements), 1)
+        self.assertEqual(entries[1].company_name, "Globex")
+        self.assertEqual(len(entries[1].achievements), 1)
 
-def test_parse_work_modern_two_entries_boundary():
-    lines = [
-        "Acme Corp | Software Engineer  March 2022 – December 2025",
-        "• Built distributed system handling large traffic volumes",
-        "Globex | Senior Engineer  January 2020 – February 2022",
-        "• Led rewrite of core authentication service used across org",
-    ]
-    entries = _parse_work_modern(lines)
-    assert len(entries) == 2
-    assert entries[0].company_name == "Acme Corp"
-    assert len(entries[0].achievements) == 1
-    assert entries[1].company_name == "Globex"
-    assert len(entries[1].achievements) == 1
-
-
-def test_parse_work_modern_short_lines_filtered():
-    lines = [
-        "Acme Corp | Software Engineer  March 2022 – Present",
-        "• Short",  # < 16 chars after stripping bullet → filtered
-        "• Built a scalable microservice architecture for payments",
-    ]
-    entries = _parse_work_modern(lines)
-    assert len(entries[0].achievements) == 1
-    assert "microservice" in entries[0].achievements[0].desc
+    def test_short_lines_filtered(self):
+        lines = [
+            "Acme Corp | Software Engineer  March 2022 – Present",
+            "• Short",
+            "• Built a scalable microservice architecture for payments",
+        ]
+        entries = _parse_work_modern(lines)
+        self.assertEqual(len(entries[0].achievements), 1)
+        self.assertIn("microservice", entries[0].achievements[0].desc)
 
 
 # ── parse_resume integration ──────────────────────────────────────────────────
@@ -242,29 +216,27 @@ BS Computer Science, University of Oregon, 2019
 """
 
 
-def test_parse_resume_happy_path():
-    result = parse_resume(_SAMPLE_RESUME, "jane_resume.docx")
-    assert result is not None
-    assert result.first_name == "Jane"
-    assert result.last_name == "Doe"
-    assert result.email == "jane@example.com"
-    assert len(result.work_experiences) == 2
-    assert result.work_experiences[0].company_name == "Acme Corp"
-    assert len(result.badge_skills) >= 3
-    assert result.professional_statement != ""
-    assert result.education != ""
+class TestParseResume(unittest.TestCase):
+    def test_happy_path(self):
+        result = parse_resume(_SAMPLE_RESUME, "jane_resume.docx")
+        self.assertIsNotNone(result)
+        self.assertEqual(result.first_name, "Jane")
+        self.assertEqual(result.last_name, "Doe")
+        self.assertEqual(result.email, "jane@example.com")
+        self.assertEqual(len(result.work_experiences), 2)
+        self.assertEqual(result.work_experiences[0].company_name, "Acme Corp")
+        self.assertGreaterEqual(len(result.badge_skills), 3)
+        self.assertNotEqual(result.professional_statement, "")
+        self.assertNotEqual(result.education, "")
 
+    def test_empty_returns_none(self):
+        self.assertIsNone(parse_resume("", "resume.docx"))
 
-def test_parse_resume_empty_returns_none():
-    assert parse_resume("", "resume.docx") is None
+    def test_whitespace_only_returns_none(self):
+        self.assertIsNone(parse_resume("   \n\n  \n", "resume.docx"))
 
-
-def test_parse_resume_whitespace_only_returns_none():
-    assert parse_resume("   \n\n  \n", "resume.docx") is None
-
-
-def test_parse_resume_no_name_falls_back_to_filename():
-    text = """\
+    def test_no_name_falls_back_to_filename(self):
+        text = """\
 someone@example.com
 503-555-1234
 
@@ -275,27 +247,25 @@ Acme Corp | Engineer  Jan 2020 – Present
 Skills
 Python
 """
-    result = parse_resume(text, "john_smith_resume.docx")
-    assert result is not None
-    assert result.first_name.lower() == "john"
+        result = parse_resume(text, "john_smith_resume.docx")
+        self.assertIsNotNone(result)
+        self.assertEqual(result.first_name.lower(), "john")
 
-
-def test_parse_resume_no_experience_section():
-    text = """\
+    def test_no_experience_section(self):
+        text = """\
 Jane Doe
 jane@example.com
 
 Skills
 Python, Go
 """
-    result = parse_resume(text, "jane.docx")
-    assert result is not None
-    assert result.work_experiences == []
-    assert len(result.badge_skills) >= 1
+        result = parse_resume(text, "jane.docx")
+        self.assertIsNotNone(result)
+        self.assertEqual(result.work_experiences, [])
+        self.assertGreaterEqual(len(result.badge_skills), 1)
 
-
-def test_parse_resume_professional_statement_from_summary():
-    text = """\
+    def test_professional_statement_from_summary(self):
+        text = """\
 Jane Doe
 jane@example.com
 
@@ -305,6 +275,10 @@ Experienced engineer building scalable distributed systems.
 Skills
 Python
 """
-    result = parse_resume(text, "jane.docx")
-    assert result is not None
-    assert "Experienced engineer" in result.professional_statement
+        result = parse_resume(text, "jane.docx")
+        self.assertIsNotNone(result)
+        self.assertIn("Experienced engineer", result.professional_statement)
+
+
+if __name__ == "__main__":
+    unittest.main()

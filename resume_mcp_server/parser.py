@@ -315,7 +315,7 @@ def parse_resume(text: str, filename: str) -> ResumeCreate | None:
     """
     # Work with both raw (for paragraph-group detection) and stripped lines
     raw_lines = text.split("\n")
-    lines = [l.strip() for l in raw_lines]
+    lines = [re.sub(r'^#+\s*', '', l.strip()) for l in raw_lines]
 
     if not any(lines):
         return None
