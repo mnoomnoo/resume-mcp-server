@@ -77,6 +77,7 @@ class _ReloadHandler(FileSystemEventHandler):
 @asynccontextmanager
 async def lifespan(server: FastMCP):
     global _collection
+    RESUME_DIR.mkdir(parents=True, exist_ok=True)
     _collection = ResumeCollection(resume_dir=RESUME_DIR)
     count = _collection.load()
     logger.info("Loaded %d documents from %s", count, RESUME_DIR)
@@ -327,7 +328,7 @@ def get_badge_skill(id: str) -> dict[str, Any] | str:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
-    transport = os.environ.get("FASTMCP_TRANSPORT", "http")
+    transport = os.environ.get("FASTMCP_TRANSPORT", "stdio")
     host = os.environ.get("FASTMCP_HOST", "0.0.0.0")
     port = int(os.environ.get("FASTMCP_PORT", "8001"))
     mcp.run(transport=transport, host=host, port=port)
