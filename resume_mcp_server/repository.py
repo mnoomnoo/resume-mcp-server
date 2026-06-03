@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from .models import (
     ID, generate_id, utc_now,
     BadgeSkillModel, AchievementModel, WorkExperienceModel, ResumeModel,
@@ -20,6 +22,7 @@ class ResumeRepository:
         self._work_experiences_by_id: dict[ID, WorkExperienceModel] = {}
         self._resumes_by_id: dict[ID, ResumeModel] = {}
         self._badge_skills_by_title: dict[str, BadgeSkillModel] = {}
+        self._work_experience_to_resume: dict[ID, ID] = {}
 
     def clear(self) -> None:
         self._badge_skills.clear()
@@ -31,6 +34,7 @@ class ResumeRepository:
         self._work_experiences_by_id.clear()
         self._resumes_by_id.clear()
         self._badge_skills_by_title.clear()
+        self._work_experience_to_resume.clear()
 
     # ── Model → Response ─────────────────────────────────────────────────────
 
@@ -117,6 +121,8 @@ class ResumeRepository:
         )
         self._resumes.append(model)
         self._resumes_by_id[model.id] = model
+        for wid in work_experience_ids:
+            self._work_experience_to_resume[wid] = model.id
         return self._resume_to_response(model)
 
     # ── Find by ID ────────────────────────────────────────────────────────────
@@ -142,6 +148,33 @@ class ResumeRepository:
     def list_resumes(self) -> list[ResumeResponse]:
         return [self._resume_to_response(m) for m in self._resumes]
 
+    def list_resume_summaries(self) -> list[dict]:
+        return [
+            {
+                "id": r.id,
+                "first_name": r.first_name,
+                "last_name": r.last_name,
+                "email": r.email,
+                "phone_num": r.phone_num,
+            }
+            for r in self._resumes
+        ]
+
+    def get_resume_profile(self, resume_id: ID) -> dict | None:
+        r = self._resumes_by_id.get(resume_id)
+        if r is None:
+            return None
+        return {
+            "id": r.id,
+            "first_name": r.first_name,
+            "last_name": r.last_name,
+            "email": r.email,
+            "phone_num": r.phone_num,
+            "address": r.address,
+            "professional_statement": r.professional_statement,
+            "education": r.education,
+        }
+
     def list_achievements(self, resume_id: ID | None = None) -> list[AchievementResponse]:
         if resume_id is None:
             return [self._achievement_to_response(a) for a in self._achievements]
@@ -156,17 +189,17 @@ class ResumeRepository:
                 achievement_ids.update(w.achievements)
         return [self._achievement_to_response(a) for a in self._achievements if a.id in achievement_ids]
 
-    def list_work_experiences(self, resume_id: ID | None = None) -> list[WorkExperienceResponse]:
+    def list_work_experiences(self, resume_id: ID | None = None, current_only: bool = False) -> list[WorkExperienceResponse]:
         if resume_id is None:
-            return [self._work_experience_to_response(w) for w in self._work_experiences]
-        resume = self._resumes_by_id.get(resume_id)
-        if not resume:
-            return []
-        return [
-            self._work_experience_to_response(self._work_experiences_by_id[wid])
-            for wid in resume.work_experiences
-            if wid in self._work_experiences_by_id
-        ]
+            results = self._work_experiences
+        else:
+            resume = self._resumes_by_id.get(resume_id)
+            if not resume:
+                return []
+            results = [self._work_experiences_by_id[wid] for wid in resume.work_experiences if wid in self._work_experiences_by_id]
+        if current_only:
+            results = [w for w in results if re.search(r"present", w.end_date, re.IGNORECASE)]
+        return [self._work_experience_to_response(w) for w in results]
 
     def list_badge_skills(self, resume_id: ID | None = None) -> list[BadgeSkillResponse]:
         if resume_id is None:
@@ -179,3 +212,82 @@ class ResumeRepository:
             for bid in resume.badge_skills
             if bid in self._badge_skills_by_id
         ]
+
+    # ── Search ────────────────────────────────────────────────────────────────
+
+    def search_badge_skills(self, query: str) -> list[BadgeSkillResponse]:
+        pattern = re.compile(re.escape(query), re.IGNORECASE)
+        return [
+            self._badge_skill_to_response(s)
+            for s in self._badge_skills
+            if pattern.search(s.title)
+        ]
+
+    def search_work_experiences(self, query: str) -> list[dict]:
+        pattern = re.compile(re.escape(query), re.IGNORECASE)
+        results = []
+        for we in self._work_experiences:
+            if pattern.search(we.company_name) or pattern.search(we.position_title):
+                hit = True
+            else:
+                hit = any(
+                    (ach := self._achievements_by_id.get(aid)) is not None
+                    and pattern.search(ach.desc)
+                    for aid in we.achievements
+                )
+            if hit:
+                result = self._work_experience_to_response(we).model_dump()
+                result["resume_id"] = self._work_experience_to_resume.get(we.id)
+                results.append(result)
+        return results
+
+    def search_achievements(self, query: str, resume_id: ID | None = None) -> list[dict]:
+        pattern = re.compile(re.escape(query), re.IGNORECASE)
+        results = []
+        for we in self._work_experiences:
+            if resume_id is not None and self._work_experience_to_resume.get(we.id) != resume_id:
+                continue
+            for aid in we.achievements:
+                ach = self._achievements_by_id.get(aid)
+                if ach and pattern.search(ach.desc):
+                    results.append({
+                        "id": ach.id,
+                        "desc": ach.desc,
+                        "company_name": we.company_name,
+                        "position_title": we.position_title,
+                        "work_experience_id": we.id,
+                        "resume_id": self._work_experience_to_resume.get(we.id),
+                    })
+        return results
+
+    def search_resumes_by_name(self, query: str) -> list[dict]:
+        pattern = re.compile(re.escape(query), re.IGNORECASE)
+        return [
+            {
+                "id": r.id,
+                "first_name": r.first_name,
+                "last_name": r.last_name,
+                "email": r.email,
+                "phone_num": r.phone_num,
+            }
+            for r in self._resumes
+            if pattern.search(r.first_name) or pattern.search(r.last_name)
+        ]
+
+    def search_resumes_by_skill(self, skill: str) -> list[dict]:
+        pattern = re.compile(re.escape(skill), re.IGNORECASE)
+        matching_ids = {s.id for s in self._badge_skills if pattern.search(s.title)}
+        if not matching_ids:
+            return []
+        results = []
+        for r in self._resumes:
+            matched = matching_ids & set(r.badge_skills)
+            if matched:
+                titles = [self._badge_skills_by_id[sid].title for sid in matched if sid in self._badge_skills_by_id]
+                results.append({
+                    "id": r.id,
+                    "first_name": r.first_name,
+                    "last_name": r.last_name,
+                    "matched_skills": titles,
+                })
+        return results

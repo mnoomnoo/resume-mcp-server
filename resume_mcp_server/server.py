@@ -11,8 +11,12 @@ from fastmcp import FastMCP
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
+from dotenv import load_dotenv
+
 from .collection import ResumeCollection, SUPPORTED_EXTENSIONS
 from .repository import ResumeRepository
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +108,29 @@ def _get_repo() -> ResumeRepository:
 
 
 @mcp.tool()
+def list_resume_summaries() -> list[dict[str, Any]]:
+    """List all resumes as lightweight identity records — id, name, email, phone only.
+    Use this to orient and pick a resume_id before fetching details with other tools.
+    Much more token-efficient than list_resumes when you only need to identify who is present.
+    """
+    return _get_repo().list_resume_summaries()
+
+
+@mcp.tool()
+def get_resume_profile(resume_id: str) -> dict[str, Any] | str:
+    """Get a resume's top-level fields (contact info, professional statement, education)
+    without the nested work experience and badge skill lists.
+
+    Args:
+        resume_id: Resume ID from list_resume_summaries or search_resumes_by_name
+    """
+    result = _get_repo().get_resume_profile(resume_id)
+    if result is None:
+        return f"Error: resume {resume_id!r} not found"
+    return result
+
+
+@mcp.tool()
 def list_resumes(doc_type: str | None = None) -> list[dict[str, Any]]:
     """List all documents. When doc_type is 'resume' (or omitted), structured resume data
     is returned if available; otherwise flat file metadata is returned.
@@ -164,13 +191,76 @@ def search_resumes(query: str, doc_type: str | None = None) -> list[dict[str, An
 
 
 @mcp.tool()
-def list_work_experiences(resume_id: str | None = None) -> list[dict[str, Any]]:
-    """List work experiences, optionally filtered to a specific resume.
+def search_skills(query: str) -> list[dict[str, Any]]:
+    """Search badge skills by title keyword.
 
     Args:
-        resume_id: Optional resume ID from list_resumes to filter results
+        query: Text to search for in skill titles (case-insensitive)
     """
-    results = _get_repo().list_work_experiences(resume_id=resume_id)
+    return [s.model_dump() for s in _get_repo().search_badge_skills(query)]
+
+
+@mcp.tool()
+def search_work_experiences(query: str) -> list[dict[str, Any]]:
+    """Search work experiences by company name, position title, or achievement descriptions.
+
+    Each result includes a resume_id field identifying which resume the experience belongs to.
+
+    Args:
+        query: Text to search for (case-insensitive)
+    """
+    return _get_repo().search_work_experiences(query)
+
+
+@mcp.tool()
+def search_achievements(query: str, resume_id: str | None = None) -> list[dict[str, Any]]:
+    """Search achievement descriptions directly, returning only matching bullets with minimal parent context.
+    More token-efficient than search_work_experiences when you only need matching achievements.
+
+    Each result includes: id, desc, company_name, position_title, work_experience_id, resume_id.
+
+    Args:
+        query: Text to search for in achievement descriptions (case-insensitive)
+        resume_id: Optional resume ID to scope the search to one resume
+    """
+    return _get_repo().search_achievements(query, resume_id)
+
+
+@mcp.tool()
+def search_resumes_by_name(query: str) -> list[dict[str, Any]]:
+    """Find resumes by person name (first or last name). Returns minimal identity fields only —
+    use the returned id with other tools to fetch full details.
+
+    Each result includes: id, first_name, last_name, email, phone_num.
+
+    Args:
+        query: Name fragment to search for (case-insensitive)
+    """
+    return _get_repo().search_resumes_by_name(query)
+
+
+@mcp.tool()
+def search_resumes_by_skill(skill: str) -> list[dict[str, Any]]:
+    """Find which resumes list a given badge skill. Returns resume identity and matched skill names only —
+    more token-efficient than list_resumes when filtering by skill.
+
+    Each result includes: id, first_name, last_name, matched_skills.
+
+    Args:
+        skill: Skill title fragment to search for (case-insensitive, partial match)
+    """
+    return _get_repo().search_resumes_by_skill(skill)
+
+
+@mcp.tool()
+def list_work_experiences(resume_id: str | None = None, current_only: bool = False) -> list[dict[str, Any]]:
+    """List work experiences, optionally filtered to a specific resume and/or only current roles.
+
+    Args:
+        resume_id: Optional resume ID from list_resume_summaries to filter results
+        current_only: If True, return only roles where end_date is 'Present'
+    """
+    results = _get_repo().list_work_experiences(resume_id=resume_id, current_only=current_only)
     return [r.model_dump() for r in results]
 
 
