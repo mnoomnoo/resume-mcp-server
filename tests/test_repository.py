@@ -5,6 +5,7 @@ import unittest
 from resume_mcp_server.models import (
     AchievementCreate,
     BadgeSkillCreate,
+    EducationCreate,
     ResumeCreate,
     WorkExperienceCreate,
 )
@@ -16,6 +17,7 @@ def _make_resume(
     last: str = "Doe",
     skills: list[str] | None = None,
     companies: list[str] | None = None,
+    education_entries: list[EducationCreate] | None = None,
 ) -> ResumeCreate:
     badge_skills = [BadgeSkillCreate(title=s) for s in (skills or [])]
     work_experiences = [
@@ -41,6 +43,7 @@ def _make_resume(
         education="BS Computer Science",
         work_experiences=work_experiences,
         badge_skills=badge_skills,
+        education_entries=education_entries or [],
     )
 
 
@@ -597,21 +600,108 @@ class TestSearchResumesBySkill(unittest.TestCase):
         self.assertEqual(results[0].title, "Python")
 
 
+# ── education ─────────────────────────────────────────────────────────────────
+
+def _education(institution="University of Oregon", degree="BS Computer Science", year="2016", competencies=None):
+    return EducationCreate(
+        institution=institution, degree=degree, year=year,
+        competencies=[BadgeSkillCreate(title=c) for c in (competencies or [])],
+    )
+
+
+class TestEducation(unittest.TestCase):
+    def setUp(self):
+        self.repo = ResumeRepository()
+
+    def test_find_education(self):
+        resp = self.repo.add_resume(_make_resume(education_entries=[_education(competencies=["Algorithms"])]))
+        edu_id = resp.education_entries[0].id
+        found = self.repo.find_education(edu_id)
+        self.assertIsNotNone(found)
+        self.assertEqual(found.institution, "University of Oregon")
+        self.assertEqual([c.title for c in found.competencies], ["Algorithms"])
+
+    def test_find_education_unknown_returns_none(self):
+        self.assertIsNone(self.repo.find_education("bad-id"))
+
+    def test_list_education_no_filter(self):
+        self.repo.add_resume(_make_resume("Alice", "A", education_entries=[_education(institution="Reed College")]))
+        self.repo.add_resume(_make_resume("Bob", "B", education_entries=[_education(institution="Lewis & Clark")]))
+        results = self.repo.list_education()
+        self.assertEqual(len(results), 2)
+
+    def test_list_education_filtered_by_resume(self):
+        resp_a = self.repo.add_resume(_make_resume("Alice", "A", education_entries=[_education(institution="Reed College")]))
+        self.repo.add_resume(_make_resume("Bob", "B", education_entries=[_education(institution="Lewis & Clark")]))
+        results = self.repo.list_education(resume_id=resp_a.id)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].institution, "Reed College")
+
+    def test_list_education_unknown_resume_returns_empty(self):
+        self.assertEqual(self.repo.list_education(resume_id="bad-id"), [])
+
+    def test_search_education_by_institution(self):
+        resp = self.repo.add_resume(_make_resume(education_entries=[_education(institution="University of Oregon")]))
+        results = self.repo.search_education("Oregon")
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["resume_id"], resp.id)
+
+    def test_search_education_by_degree(self):
+        self.repo.add_resume(_make_resume(education_entries=[_education(degree="MS Computer Science")]))
+        results = self.repo.search_education("Computer Science")
+        self.assertEqual(len(results), 1)
+
+    def test_search_education_by_competency(self):
+        self.repo.add_resume(_make_resume(education_entries=[_education(competencies=["Algorithms"])]))
+        results = self.repo.search_education("Algorithms")
+        self.assertEqual(len(results), 1)
+
+    def test_search_education_scoped_by_resume(self):
+        resp_a = self.repo.add_resume(_make_resume("Alice", "A", education_entries=[_education(institution="Reed College")]))
+        resp_b = self.repo.add_resume(_make_resume("Bob", "B", education_entries=[_education(institution="Reed College")]))
+        results = self.repo.search_education("Reed", resume_id=resp_a.id)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["resume_id"], resp_a.id)
+        self.assertNotEqual(results[0]["resume_id"], resp_b.id)
+
+    def test_search_education_no_match(self):
+        self.repo.add_resume(_make_resume(education_entries=[_education()]))
+        self.assertEqual(self.repo.search_education("Nonexistent University"), [])
+
+    def test_search_education_by_competency_match(self):
+        resp = self.repo.add_resume(_make_resume(education_entries=[_education(competencies=["Algorithms", "Databases"])]))
+        results = self.repo.search_education_by_competency("Algorithms")
+        self.assertEqual(len(results), 1)
+        self.assertIn("Algorithms", results[0]["matched_competencies"])
+        self.assertEqual(results[0]["resume_id"], resp.id)
+
+    def test_search_education_by_competency_partial_match(self):
+        self.repo.add_resume(_make_resume(education_entries=[_education(competencies=["Operating Systems"])]))
+        results = self.repo.search_education_by_competency("operating")
+        self.assertEqual(len(results), 1)
+
+    def test_search_education_by_competency_no_match(self):
+        self.repo.add_resume(_make_resume(education_entries=[_education(competencies=["Algorithms"])]))
+        self.assertEqual(self.repo.search_education_by_competency("COBOL"), [])
+
+
 # ── clear ─────────────────────────────────────────────────────────────────────
 
 class TestClear(unittest.TestCase):
     def test_empties_all_stores(self):
         repo = ResumeRepository()
-        repo.add_resume(_make_resume(companies=["Acme"], skills=["Python"]))
+        repo.add_resume(_make_resume(companies=["Acme"], skills=["Python"], education_entries=[_education()]))
         repo.clear()
         self.assertEqual(repo.list_resumes(), [])
         self.assertEqual(repo.list_work_experiences(), [])
         self.assertEqual(repo.list_achievements(), [])
         self.assertEqual(repo.list_badge_skills(), [])
+        self.assertEqual(repo.list_education(), [])
         self.assertEqual(repo._resumes, [])
         self.assertEqual(repo._work_experiences, [])
         self.assertEqual(repo._achievements, [])
         self.assertEqual(repo._badge_skills, [])
+        self.assertEqual(repo._education, [])
 
 
 if __name__ == "__main__":

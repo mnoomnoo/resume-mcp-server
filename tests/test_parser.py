@@ -5,6 +5,7 @@ import unittest
 from resume_mcp_server.parser import (
     _extract_contact,
     _find_sections,
+    _parse_education,
     _parse_skills,
     _parse_work_modern,
     _split_company_title,
@@ -278,6 +279,77 @@ Python
         result = parse_resume(text, "jane.docx")
         self.assertIsNotNone(result)
         self.assertIn("Experienced engineer", result.professional_statement)
+
+
+# ── _parse_education ─────────────────────────────────────────────────────────
+
+class TestParseEducation(unittest.TestCase):
+    def test_single_entry(self):
+        lines = ["BS Computer Science, University of Oregon, 2016"]
+        entries = _parse_education(lines)
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0].degree, "BS Computer Science")
+        self.assertEqual(entries[0].institution, "University of Oregon")
+        self.assertEqual(entries[0].year, "2016")
+        self.assertEqual(entries[0].competencies, [])
+
+    def test_entry_with_coursework(self):
+        lines = [
+            "BS Computer Science, University of Oregon, 2016",
+            "Relevant Coursework: Algorithms, Operating Systems, Databases",
+        ]
+        entries = _parse_education(lines)
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(
+            [c.title for c in entries[0].competencies],
+            ["Algorithms", "Operating Systems", "Databases"],
+        )
+
+    def test_multiple_entries(self):
+        lines = [
+            "MS Computer Science, Portland State University, 2020",
+            "Coursework: Machine Learning, Distributed Systems",
+            "BS Computer Science, University of Oregon, 2016",
+        ]
+        entries = _parse_education(lines)
+        self.assertEqual(len(entries), 2)
+        self.assertEqual(entries[0].institution, "Portland State University")
+        self.assertEqual([c.title for c in entries[0].competencies], ["Machine Learning", "Distributed Systems"])
+        self.assertEqual(entries[1].institution, "University of Oregon")
+        self.assertEqual(entries[1].competencies, [])
+
+    def test_no_year(self):
+        lines = ["BS Computer Science, University of Oregon"]
+        entries = _parse_education(lines)
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0].year, "")
+        self.assertEqual(entries[0].institution, "University of Oregon")
+
+    def test_no_comma_lines_ignored(self):
+        lines = ["BS Computer Science, University of Oregon, 2016", "Minor in Mathematics"]
+        entries = _parse_education(lines)
+        self.assertEqual(len(entries), 1)
+
+    def test_empty_section(self):
+        self.assertEqual(_parse_education([]), [])
+
+    def test_parse_resume_includes_education_entries(self):
+        text = """\
+Jane Doe
+jane@example.com
+
+Education
+BS Computer Science, University of Oregon, 2016
+Relevant Coursework: Algorithms, Operating Systems
+"""
+        result = parse_resume(text, "jane.docx")
+        self.assertIsNotNone(result)
+        self.assertEqual(len(result.education_entries), 1)
+        self.assertEqual(result.education_entries[0].institution, "University of Oregon")
+        self.assertEqual(
+            [c.title for c in result.education_entries[0].competencies],
+            ["Algorithms", "Operating Systems"],
+        )
 
 
 if __name__ == "__main__":

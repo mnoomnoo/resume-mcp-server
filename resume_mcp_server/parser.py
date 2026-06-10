@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 
 from .models import (
-    AchievementCreate, BadgeSkillCreate, ResumeCreate, WorkExperienceCreate,
+    AchievementCreate, BadgeSkillCreate, EducationCreate, ResumeCreate, WorkExperienceCreate,
 )
 
 # ── Regexes ───────────────────────────────────────────────────────────────────
@@ -49,6 +49,9 @@ _JOB_TITLE_WORDS = {
 
 # Bullet characters used in em-dash and other resume bullets
 _BULLETS = "•·▪▸◦✓—–"
+
+_COURSEWORK_RE = re.compile(r"^(?:relevant\s+)?coursework:?\s*(.*)$", re.IGNORECASE)
+_YEAR_RE = re.compile(r"^\d{4}$|^present$", re.IGNORECASE)
 
 
 # ── Section splitting ─────────────────────────────────────────────────────────
@@ -306,6 +309,38 @@ def _parse_skills(lines: list[str]) -> list[BadgeSkillCreate]:
     return skills
 
 
+# ── Education parsing ─────────────────────────────────────────────────────────
+
+def _parse_education(lines: list[str]) -> list[EducationCreate]:
+    """
+    Each entry line looks like 'Degree, Institution, Year' (year optional).
+    A following 'Relevant Coursework: X, Y, Z' line attaches competencies
+    to the most recent entry.
+    """
+    entries: list[EducationCreate] = []
+    for raw in lines:
+        line = raw.strip()
+        if not line:
+            continue
+        m = _COURSEWORK_RE.match(line)
+        if m:
+            if entries:
+                for token in re.split(r"[,;]", m.group(1)):
+                    skill = token.strip()
+                    if skill:
+                        entries[-1].competencies.append(BadgeSkillCreate(title=skill))
+            continue
+        if "," in line:
+            parts = [p.strip() for p in line.split(",")]
+            year = ""
+            if parts and _YEAR_RE.match(parts[-1]):
+                year = parts.pop()
+            degree = parts[0] if parts else line
+            institution = ", ".join(parts[1:])
+            entries.append(EducationCreate(institution=institution, degree=degree, year=year, competencies=[]))
+    return entries
+
+
 # ── Main entry point ──────────────────────────────────────────────────────────
 
 def parse_resume(text: str, filename: str) -> ResumeCreate | None:
@@ -334,6 +369,7 @@ def parse_resume(text: str, filename: str) -> ResumeCreate | None:
 
     professional_statement = "\n".join(sections.get("summary", []))
     education = "\n".join(sections.get("education", []))
+    education_entries = _parse_education(sections.get("education", []))
 
     # Work experience
     we_lines = sections.get("experience", [])
@@ -354,4 +390,5 @@ def parse_resume(text: str, filename: str) -> ResumeCreate | None:
         education=education,
         work_experiences=work_experiences,
         badge_skills=badge_skills,
+        education_entries=education_entries,
     )
