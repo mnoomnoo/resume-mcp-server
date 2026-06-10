@@ -6,6 +6,7 @@ from resume_mcp_server.models import (
     AchievementCreate,
     BadgeSkillCreate,
     ResumeCreate,
+    SideProjectCreate,
     WorkExperienceCreate,
 )
 from resume_mcp_server.repository import ResumeRepository
@@ -16,6 +17,7 @@ def _make_resume(
     last: str = "Doe",
     skills: list[str] | None = None,
     companies: list[str] | None = None,
+    projects: list[SideProjectCreate] | None = None,
 ) -> ResumeCreate:
     badge_skills = [BadgeSkillCreate(title=s) for s in (skills or [])]
     work_experiences = [
@@ -41,6 +43,7 @@ def _make_resume(
         education="BS Computer Science",
         work_experiences=work_experiences,
         badge_skills=badge_skills,
+        side_projects=projects or [],
     )
 
 
@@ -61,7 +64,7 @@ def _make_resume_mixed_dates(first: str = "Jane", last: str = "Doe") -> ResumeCr
                 achievements=[AchievementCreate(desc="Past role task")],
             ),
         ],
-        badge_skills=[],
+        badge_skills=[], side_projects=[],
     )
 
 
@@ -159,7 +162,7 @@ class TestAchievementOrdering(unittest.TestCase):
             first_name="Jane", last_name="Doe",
             email="jane@example.com", phone_num="555-555-5555",
             address="Portland, OR", professional_statement="",
-            education="", work_experiences=[we], badge_skills=[],
+            education="", work_experiences=[we], badge_skills=[], side_projects=[],
         )
         resp = self.repo.add_resume(resume)
         descs = [a.desc for a in resp.work_experiences[0].achievements]
@@ -271,7 +274,7 @@ class TestSearchWorkExperiences(unittest.TestCase):
             first_name="Jane", last_name="Doe",
             email="jane@example.com", phone_num="555-555-5555",
             address="Portland, OR", professional_statement="",
-            education="", work_experiences=[we], badge_skills=[],
+            education="", work_experiences=[we], badge_skills=[], side_projects=[],
         )
         resp = self.repo.add_resume(resume)
         results = self.repo.search_work_experiences("Senior")
@@ -289,7 +292,7 @@ class TestSearchWorkExperiences(unittest.TestCase):
             first_name="Art", last_name="Vandelay",
             email="art@example.com", phone_num="555-555-5555",
             address="New York, NY", professional_statement="",
-            education="", work_experiences=[we], badge_skills=[],
+            education="", work_experiences=[we], badge_skills=[], side_projects=[],
         )
         resp = self.repo.add_resume(resume)
         results = self.repo.search_work_experiences("latency")
@@ -412,7 +415,7 @@ class TestCurrentOnlyFilter(unittest.TestCase):
                     achievements=[AchievementCreate(desc="Doing things")],
                 ),
             ],
-            badge_skills=[],
+            badge_skills=[], side_projects=[],
         ))
         results = self.repo.list_work_experiences(current_only=True)
         self.assertEqual(len(results), 1)
@@ -430,7 +433,7 @@ class TestCurrentOnlyFilter(unittest.TestCase):
                     achievements=[AchievementCreate(desc="Old task")],
                 ),
             ],
-            badge_skills=[],
+            badge_skills=[], side_projects=[],
         ))
         self.assertEqual(self.repo.list_work_experiences(current_only=True), [])
 
@@ -497,11 +500,112 @@ class TestSearchAchievements(unittest.TestCase):
                     ],
                 ),
             ],
-            badge_skills=[],
+            badge_skills=[], side_projects=[],
         ))
         results = self.repo.search_achievements("latency")
         self.assertEqual(len(results), 1)
         self.assertIn("latency", results[0]["desc"])
+
+
+# ── side projects ────────────────────────────────────────────────────────────
+
+class TestSideProjects(unittest.TestCase):
+    def setUp(self):
+        self.repo = ResumeRepository()
+
+    def _project(self, name="Resume Bot", desc="A bot that writes resumes", techs=None):
+        return SideProjectCreate(
+            name=name, description=desc,
+            technologies=[BadgeSkillCreate(title=t) for t in (techs or [])],
+        )
+
+    def test_find_side_project(self):
+        resp = self.repo.add_resume(_make_resume(projects=[self._project(techs=["Python"])]))
+        project_id = resp.side_projects[0].id
+        found = self.repo.find_side_project(project_id)
+        self.assertIsNotNone(found)
+        self.assertEqual(found.name, "Resume Bot")
+        self.assertEqual([t.title for t in found.technologies], ["Python"])
+
+    def test_find_side_project_unknown_returns_none(self):
+        self.assertIsNone(self.repo.find_side_project("bad-id"))
+
+    def test_list_side_projects_all(self):
+        self.repo.add_resume(_make_resume("Alice", "A", projects=[self._project(name="Project A")]))
+        self.repo.add_resume(_make_resume("Bob", "B", projects=[self._project(name="Project B")]))
+        results = self.repo.list_side_projects()
+        self.assertEqual({p.name for p in results}, {"Project A", "Project B"})
+
+    def test_list_side_projects_scoped_by_resume(self):
+        resp_a = self.repo.add_resume(_make_resume("Alice", "A", projects=[self._project(name="Project A")]))
+        self.repo.add_resume(_make_resume("Bob", "B", projects=[self._project(name="Project B")]))
+        results = self.repo.list_side_projects(resume_id=resp_a.id)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].name, "Project A")
+
+    def test_list_side_projects_unknown_resume_returns_empty(self):
+        self.assertEqual(self.repo.list_side_projects(resume_id="bad-id"), [])
+
+    def test_search_by_name(self):
+        resp = self.repo.add_resume(_make_resume(projects=[self._project(name="Resume Bot")]))
+        results = self.repo.search_side_projects("resume")
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["name"], "Resume Bot")
+        self.assertEqual(results[0]["resume_id"], resp.id)
+
+    def test_search_by_description(self):
+        self.repo.add_resume(_make_resume(projects=[self._project(desc="A tool for tracking finances")]))
+        results = self.repo.search_side_projects("finances")
+        self.assertEqual(len(results), 1)
+
+    def test_search_by_technology(self):
+        self.repo.add_resume(_make_resume(projects=[self._project(techs=["Rust", "WebAssembly"])]))
+        results = self.repo.search_side_projects("wasm")
+        self.assertEqual(results, [])
+        results = self.repo.search_side_projects("WebAssembly")
+        self.assertEqual(len(results), 1)
+
+    def test_search_scoped_by_resume_id(self):
+        resp_a = self.repo.add_resume(_make_resume("Alice", "A", projects=[self._project(name="Alpha Project")]))
+        self.repo.add_resume(_make_resume("Bob", "B", projects=[self._project(name="Beta Project")]))
+        results = self.repo.search_side_projects("Project", resume_id=resp_a.id)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["name"], "Alpha Project")
+
+    def test_search_no_match(self):
+        self.repo.add_resume(_make_resume(projects=[self._project()]))
+        self.assertEqual(self.repo.search_side_projects("quantum entanglement"), [])
+
+    def test_search_by_technology_returns_matched_technologies(self):
+        resp = self.repo.add_resume(_make_resume(
+            projects=[self._project(name="ML Pipeline", techs=["Python", "TensorFlow"])]
+        ))
+        results = self.repo.search_side_projects_by_technology("python")
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["name"], "ML Pipeline")
+        self.assertEqual(results[0]["matched_technologies"], ["Python"])
+        self.assertEqual(results[0]["resume_id"], resp.id)
+
+    def test_search_by_technology_no_match(self):
+        self.repo.add_resume(_make_resume(projects=[self._project(techs=["Python"])]))
+        self.assertEqual(self.repo.search_side_projects_by_technology("COBOL"), [])
+
+    def test_search_by_technology_across_resumes(self):
+        resp_a = self.repo.add_resume(_make_resume("Alice", "A", projects=[self._project(name="A Project", techs=["Go"])]))
+        resp_b = self.repo.add_resume(_make_resume("Bob", "B", projects=[self._project(name="B Project", techs=["Go"])]))
+        results = self.repo.search_side_projects_by_technology("Go")
+        self.assertEqual({r["resume_id"] for r in results}, {resp_a.id, resp_b.id})
+
+    def test_technology_dedup_with_badge_skills(self):
+        resp = self.repo.add_resume(_make_resume(
+            skills=["Python"],
+            projects=[self._project(techs=["Python"])],
+        ))
+        # The badge skill from the resume's skills list and the project's
+        # technology should be deduped to the same BadgeSkill record.
+        skill_id = resp.badge_skills[0].id
+        project_tech_id = resp.side_projects[0].technologies[0].id
+        self.assertEqual(skill_id, project_tech_id)
 
 
 # ── search_resumes_by_name ────────────────────────────────────────────────────
@@ -602,16 +706,21 @@ class TestSearchResumesBySkill(unittest.TestCase):
 class TestClear(unittest.TestCase):
     def test_empties_all_stores(self):
         repo = ResumeRepository()
-        repo.add_resume(_make_resume(companies=["Acme"], skills=["Python"]))
+        repo.add_resume(_make_resume(
+            companies=["Acme"], skills=["Python"],
+            projects=[SideProjectCreate(name="Side Project", description="desc", technologies=[])],
+        ))
         repo.clear()
         self.assertEqual(repo.list_resumes(), [])
         self.assertEqual(repo.list_work_experiences(), [])
         self.assertEqual(repo.list_achievements(), [])
         self.assertEqual(repo.list_badge_skills(), [])
+        self.assertEqual(repo.list_side_projects(), [])
         self.assertEqual(repo._resumes, [])
         self.assertEqual(repo._work_experiences, [])
         self.assertEqual(repo._achievements, [])
         self.assertEqual(repo._badge_skills, [])
+        self.assertEqual(repo._side_projects, [])
 
 
 if __name__ == "__main__":

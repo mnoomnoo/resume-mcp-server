@@ -39,6 +39,14 @@ class WorkExperienceModel(BaseModel):
     achievements: list[ID]
 
 
+class SideProjectModel(BaseModel):
+    id: ID
+    created_at: str
+    name: str
+    description: str
+    technologies: list[ID]
+
+
 class ResumeModel(BaseModel):
     id: ID
     created_at: str
@@ -51,6 +59,7 @@ class ResumeModel(BaseModel):
     education: str
     work_experiences: list[ID]
     badge_skills: list[ID]
+    side_projects: list[ID]
 
 
 # ── Create schemas ────────────────────────────────────────────────────────────
@@ -71,6 +80,12 @@ class WorkExperienceCreate(BaseModel):
     achievements: list[AchievementCreate]
 
 
+class SideProjectCreate(BaseModel):
+    name: str
+    description: str
+    technologies: list[BadgeSkillCreate]
+
+
 class ResumeCreate(BaseModel):
     first_name: str
     last_name: str
@@ -81,6 +96,7 @@ class ResumeCreate(BaseModel):
     education: str
     work_experiences: list[WorkExperienceCreate]
     badge_skills: list[BadgeSkillCreate]
+    side_projects: list[SideProjectCreate]
 
 
 # ── Response schemas (nested, resolved) ─────────────────────────────────────
@@ -107,6 +123,14 @@ class WorkExperienceResponse(BaseModel):
     achievements: list[AchievementResponse]
 
 
+class SideProjectResponse(BaseModel):
+    id: ID
+    created_at: str
+    name: str
+    description: str
+    technologies: list[BadgeSkillResponse]
+
+
 class ResumeResponse(BaseModel):
     id: ID
     created_at: str
@@ -119,3 +143,4 @@ class ResumeResponse(BaseModel):
     education: str
     work_experiences: list[WorkExperienceResponse]
     badge_skills: list[BadgeSkillResponse]
+    side_projects: list[SideProjectResponse]

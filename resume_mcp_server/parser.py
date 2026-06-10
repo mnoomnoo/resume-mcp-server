@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 
 from .models import (
-    AchievementCreate, BadgeSkillCreate, ResumeCreate, WorkExperienceCreate,
+    AchievementCreate, BadgeSkillCreate, ResumeCreate, SideProjectCreate, WorkExperienceCreate,
 )
 
 # ── Regexes ───────────────────────────────────────────────────────────────────
@@ -37,6 +37,9 @@ _SECTION_PATTERNS: dict[str, re.Pattern[str]] = {
     "education": re.compile(
         r"^education(?:al\s+background)?:?$|^academic(?:\s+background)?:?$",
         re.IGNORECASE,
+    ),
+    "projects": re.compile(
+        r"^(?:side\s+|personal\s+|technical\s+)?projects?:?$", re.IGNORECASE
     ),
 }
 
@@ -306,6 +309,52 @@ def _parse_skills(lines: list[str]) -> list[BadgeSkillCreate]:
     return skills
 
 
+# ── Projects parsing ──────────────────────────────────────────────────────────
+
+_PROJECT_HEADER_RE = re.compile(r"^(.+?)\s*[|–—]\s*(.+)$")
+
+
+def _parse_projects(lines: list[str]) -> list[SideProjectCreate]:
+    """
+    Each project is a paragraph group (separated by blank lines). The first line
+    is either 'Project Name | Tech1, Tech2' (name + technology list) or just the
+    project name. Remaining lines form the description.
+    """
+    groups: list[list[str]] = []
+    current: list[str] = []
+    for line in lines:
+        if line.strip():
+            current.append(line.strip())
+        else:
+            if current:
+                groups.append(current)
+                current = []
+    if current:
+        groups.append(current)
+
+    projects: list[SideProjectCreate] = []
+    for group in groups:
+        header = group[0]
+        m = _PROJECT_HEADER_RE.match(header)
+        if m:
+            name = m.group(1).strip()
+            technologies = [
+                BadgeSkillCreate(title=re.sub(r"\s+", " ", t).strip())
+                for t in re.split(r"[,;]", m.group(2))
+                if t.strip()
+            ]
+        else:
+            name = header
+            technologies = []
+
+        description = " ".join(_strip_bullet(l) for l in group[1:] if l.strip())
+        if name:
+            projects.append(
+                SideProjectCreate(name=name, description=description, technologies=technologies)
+            )
+    return projects
+
+
 # ── Main entry point ──────────────────────────────────────────────────────────
 
 def parse_resume(text: str, filename: str) -> ResumeCreate | None:
@@ -344,6 +393,9 @@ def parse_resume(text: str, filename: str) -> ResumeCreate | None:
     # Skills
     badge_skills = _parse_skills(sections.get("skills", []))
 
+    # Side projects
+    side_projects = _parse_projects(sections.get("projects", []))
+
     return ResumeCreate(
         first_name=first_name,
         last_name=last_name,
@@ -354,4 +406,5 @@ def parse_resume(text: str, filename: str) -> ResumeCreate | None:
         education=education,
         work_experiences=work_experiences,
         badge_skills=badge_skills,
+        side_projects=side_projects,
     )
