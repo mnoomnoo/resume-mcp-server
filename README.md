@@ -15,7 +15,7 @@ Supports `.docx`, `.pdf`, `.md`, and `.txt` files, including nested subdirectori
 
 ## Quick Start
 
-Give Claude structured access to your resume collection. The server parses your documents on startup and exposes 20 tools for searching by name, company, skill, education, or full text — with automatic hot-reload when files change.
+Give Claude structured access to your resume collection. The server parses your documents on startup and exposes 21 tools for searching by name, company, skill, education, side project, or full text — with automatic hot-reload when files change.
 
 **Try it immediately with the included sample resumes:**
 
@@ -414,6 +414,50 @@ Get a single badge skill by ID.
 | Parameter | Type | Description |
 |---|---|---|
 | `id` | string | Badge skill ID from `list_badge_skills` |
+
+---
+
+### `list_side_projects`
+
+List side projects (personal/portfolio projects, distinct from work experience) that demonstrate competency with specific technologies, optionally scoped to a single resume.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `resume_id` | string (optional) | Resume ID from `list_resume_summaries` |
+
+---
+
+### `get_side_project`
+
+Get a single side project by ID, including the technologies it demonstrates.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `id` | string | Side project ID from `list_side_projects` |
+
+---
+
+### `search_side_projects`
+
+Search side projects by name, description, or associated technology.
+Each result includes a `resume_id` field identifying which resume the project belongs to.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `query` | string | Text to search for (case-insensitive) |
+| `resume_id` | string (optional) | Resume ID to scope the search to one resume |
+
+---
+
+### `search_side_projects_by_technology`
+
+Find side projects that demonstrate competency with a given technology.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `technology` | string | Technology/skill name fragment to search for (case-insensitive, partial match) |
+
+Returns: `id`, `name`, `description`, `matched_technologies`, `resume_id`.
 
 ---
 

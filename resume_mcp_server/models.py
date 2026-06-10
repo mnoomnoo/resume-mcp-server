@@ -39,6 +39,14 @@ class WorkExperienceModel(BaseModel):
     achievements: list[ID]
 
 
+class SideProjectModel(BaseModel):
+    id: ID
+    created_at: str
+    name: str
+    description: str
+    technologies: list[ID]
+
+
 class EducationModel(BaseModel):
     id: ID
     created_at: str
@@ -60,6 +68,7 @@ class ResumeModel(BaseModel):
     education: str
     work_experiences: list[ID]
     badge_skills: list[ID]
+    side_projects: list[ID]
     education_entries: list[ID]
 
 
@@ -81,6 +90,12 @@ class WorkExperienceCreate(BaseModel):
     achievements: list[AchievementCreate]
 
 
+class SideProjectCreate(BaseModel):
+    name: str
+    description: str
+    technologies: list[BadgeSkillCreate]
+
+
 class EducationCreate(BaseModel):
     institution: str
     degree: str
@@ -98,6 +113,7 @@ class ResumeCreate(BaseModel):
     education: str
     work_experiences: list[WorkExperienceCreate]
     badge_skills: list[BadgeSkillCreate]
+    side_projects: list[SideProjectCreate]
     education_entries: list[EducationCreate] = Field(default_factory=list)
 
 
@@ -125,6 +141,14 @@ class WorkExperienceResponse(BaseModel):
     achievements: list[AchievementResponse]
 
 
+class SideProjectResponse(BaseModel):
+    id: ID
+    created_at: str
+    name: str
+    description: str
+    technologies: list[BadgeSkillResponse]
+
+
 class EducationResponse(BaseModel):
     id: ID
     created_at: str
@@ -146,4 +170,5 @@ class ResumeResponse(BaseModel):
     education: str
     work_experiences: list[WorkExperienceResponse]
     badge_skills: list[BadgeSkillResponse]
+    side_projects: list[SideProjectResponse]
     education_entries: list[EducationResponse]

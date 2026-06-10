@@ -4,9 +4,9 @@ import re
 
 from .models import (
     ID, generate_id, utc_now,
-    BadgeSkillModel, AchievementModel, WorkExperienceModel, EducationModel, ResumeModel,
-    BadgeSkillCreate, AchievementCreate, WorkExperienceCreate, EducationCreate, ResumeCreate,
-    BadgeSkillResponse, AchievementResponse, WorkExperienceResponse, EducationResponse, ResumeResponse,
+    BadgeSkillModel, AchievementModel, WorkExperienceModel, SideProjectModel, EducationModel, ResumeModel,
+    BadgeSkillCreate, AchievementCreate, WorkExperienceCreate, SideProjectCreate, EducationCreate, ResumeCreate,
+    BadgeSkillResponse, AchievementResponse, WorkExperienceResponse, SideProjectResponse, EducationResponse, ResumeResponse,
 )
 
 
@@ -15,31 +15,37 @@ class ResumeRepository:
         self._badge_skills: list[BadgeSkillModel] = []
         self._achievements: list[AchievementModel] = []
         self._work_experiences: list[WorkExperienceModel] = []
+        self._side_projects: list[SideProjectModel] = []
         self._education: list[EducationModel] = []
         self._resumes: list[ResumeModel] = []
 
         self._badge_skills_by_id: dict[ID, BadgeSkillModel] = {}
         self._achievements_by_id: dict[ID, AchievementModel] = {}
         self._work_experiences_by_id: dict[ID, WorkExperienceModel] = {}
+        self._side_projects_by_id: dict[ID, SideProjectModel] = {}
         self._education_by_id: dict[ID, EducationModel] = {}
         self._resumes_by_id: dict[ID, ResumeModel] = {}
         self._badge_skills_by_title: dict[str, BadgeSkillModel] = {}
         self._work_experience_to_resume: dict[ID, ID] = {}
+        self._side_project_to_resume: dict[ID, ID] = {}
         self._education_to_resume: dict[ID, ID] = {}
 
     def clear(self) -> None:
         self._badge_skills.clear()
         self._achievements.clear()
         self._work_experiences.clear()
+        self._side_projects.clear()
         self._education.clear()
         self._resumes.clear()
         self._badge_skills_by_id.clear()
         self._achievements_by_id.clear()
         self._work_experiences_by_id.clear()
+        self._side_projects_by_id.clear()
         self._education_by_id.clear()
         self._resumes_by_id.clear()
         self._badge_skills_by_title.clear()
         self._work_experience_to_resume.clear()
+        self._side_project_to_resume.clear()
         self._education_to_resume.clear()
 
     # ── Model → Response ─────────────────────────────────────────────────────
@@ -61,6 +67,18 @@ class ResumeRepository:
             company_name=m.company_name, position_title=m.position_title,
             start_date=m.start_date, end_date=m.end_date,
             achievements=achievements,
+        )
+
+    def _side_project_to_response(self, m: SideProjectModel) -> SideProjectResponse:
+        technologies = [
+            self._badge_skill_to_response(self._badge_skills_by_id[tid])
+            for tid in m.technologies
+            if tid in self._badge_skills_by_id
+        ]
+        return SideProjectResponse(
+            id=m.id, created_at=m.created_at,
+            name=m.name, description=m.description,
+            technologies=technologies,
         )
 
     def _education_to_response(self, m: EducationModel) -> EducationResponse:
@@ -86,6 +104,11 @@ class ResumeRepository:
             for bid in m.badge_skills
             if bid in self._badge_skills_by_id
         ]
+        side_projects = [
+            self._side_project_to_response(self._side_projects_by_id[pid])
+            for pid in m.side_projects
+            if pid in self._side_projects_by_id
+        ]
         education_entries = [
             self._education_to_response(self._education_by_id[eid])
             for eid in m.education_entries
@@ -97,6 +120,7 @@ class ResumeRepository:
             email=m.email, phone_num=m.phone_num, address=m.address,
             professional_statement=m.professional_statement, education=m.education,
             work_experiences=work_experiences, badge_skills=badge_skills,
+            side_projects=side_projects,
             education_entries=education_entries,
         )
 
@@ -117,6 +141,17 @@ class ResumeRepository:
         model = AchievementModel(id=generate_id(), created_at=utc_now(), desc=create.desc)
         self._achievements.append(model)
         self._achievements_by_id[model.id] = model
+        return model
+
+    def _add_side_project(self, create: SideProjectCreate) -> SideProjectModel:
+        technology_ids = [self._add_badge_skill(t).id for t in create.technologies]
+        model = SideProjectModel(
+            id=generate_id(), created_at=utc_now(),
+            name=create.name, description=create.description,
+            technologies=technology_ids,
+        )
+        self._side_projects.append(model)
+        self._side_projects_by_id[model.id] = model
         return model
 
     def _add_work_experience(self, create: WorkExperienceCreate) -> WorkExperienceModel:
@@ -147,6 +182,7 @@ class ResumeRepository:
     def add_resume(self, create: ResumeCreate) -> ResumeResponse:
         badge_skill_ids = [self._add_badge_skill(b).id for b in create.badge_skills]
         work_experience_ids = [self._add_work_experience(w).id for w in create.work_experiences]
+        side_project_ids = [self._add_side_project(p).id for p in create.side_projects]
         education_entry_ids = [self._add_education(e).id for e in create.education_entries]
         model = ResumeModel(
             id=generate_id(), created_at=utc_now(),
@@ -154,12 +190,15 @@ class ResumeRepository:
             email=create.email, phone_num=create.phone_num, address=create.address,
             professional_statement=create.professional_statement, education=create.education,
             work_experiences=work_experience_ids, badge_skills=badge_skill_ids,
+            side_projects=side_project_ids,
             education_entries=education_entry_ids,
         )
         self._resumes.append(model)
         self._resumes_by_id[model.id] = model
         for wid in work_experience_ids:
             self._work_experience_to_resume[wid] = model.id
+        for pid in side_project_ids:
+            self._side_project_to_resume[pid] = model.id
         for eid in education_entry_ids:
             self._education_to_resume[eid] = model.id
         return self._resume_to_response(model)
@@ -181,6 +220,10 @@ class ResumeRepository:
     def find_badge_skill(self, id: ID) -> BadgeSkillResponse | None:
         m = self._badge_skills_by_id.get(id)
         return self._badge_skill_to_response(m) if m else None
+
+    def find_side_project(self, id: ID) -> SideProjectResponse | None:
+        m = self._side_projects_by_id.get(id)
+        return self._side_project_to_response(m) if m else None
 
     def find_education(self, id: ID) -> EducationResponse | None:
         m = self._education_by_id.get(id)
@@ -256,6 +299,18 @@ class ResumeRepository:
             if bid in self._badge_skills_by_id
         ]
 
+    def list_side_projects(self, resume_id: ID | None = None) -> list[SideProjectResponse]:
+        if resume_id is None:
+            return [self._side_project_to_response(p) for p in self._side_projects]
+        resume = self._resumes_by_id.get(resume_id)
+        if not resume:
+            return []
+        return [
+            self._side_project_to_response(self._side_projects_by_id[pid])
+            for pid in resume.side_projects
+            if pid in self._side_projects_by_id
+        ]
+
     def list_education(self, resume_id: ID | None = None) -> list[EducationResponse]:
         if resume_id is None:
             return [self._education_to_response(e) for e in self._education]
@@ -313,6 +368,47 @@ class ResumeRepository:
                         "work_experience_id": we.id,
                         "resume_id": self._work_experience_to_resume.get(we.id),
                     })
+        return results
+
+    def search_side_projects(self, query: str, resume_id: ID | None = None) -> list[dict]:
+        pattern = re.compile(re.escape(query), re.IGNORECASE)
+        results = []
+        for p in self._side_projects:
+            if resume_id is not None and self._side_project_to_resume.get(p.id) != resume_id:
+                continue
+            tech_titles = [
+                self._badge_skills_by_id[tid].title
+                for tid in p.technologies
+                if tid in self._badge_skills_by_id
+            ]
+            hit = (
+                pattern.search(p.name)
+                or pattern.search(p.description)
+                or any(pattern.search(t) for t in tech_titles)
+            )
+            if hit:
+                result = self._side_project_to_response(p).model_dump()
+                result["resume_id"] = self._side_project_to_resume.get(p.id)
+                results.append(result)
+        return results
+
+    def search_side_projects_by_technology(self, technology: str) -> list[dict]:
+        pattern = re.compile(re.escape(technology), re.IGNORECASE)
+        matching_ids = {s.id for s in self._badge_skills if pattern.search(s.title)}
+        if not matching_ids:
+            return []
+        results = []
+        for p in self._side_projects:
+            matched = matching_ids & set(p.technologies)
+            if matched:
+                titles = [self._badge_skills_by_id[tid].title for tid in matched if tid in self._badge_skills_by_id]
+                results.append({
+                    "id": p.id,
+                    "name": p.name,
+                    "description": p.description,
+                    "matched_technologies": titles,
+                    "resume_id": self._side_project_to_resume.get(p.id),
+                })
         return results
 
     def search_resumes_by_name(self, query: str) -> list[dict]:
