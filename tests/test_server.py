@@ -11,16 +11,20 @@ from resume_mcp_server.server import (
     get_badge_skill,
     get_resume,
     get_resume_profile,
+    get_side_project,
     get_work_experience,
     list_achievements,
     list_badge_skills,
     list_resume_summaries,
     list_resumes,
+    list_side_projects,
     list_work_experiences,
     search_achievements,
     search_resumes,
     search_resumes_by_name,
     search_resumes_by_skill,
+    search_side_projects,
+    search_side_projects_by_technology,
     search_skills,
     search_work_experiences,
 )
@@ -48,6 +52,10 @@ Widgets Inc | Senior Software Engineer  Jan 2018 – Feb 2021
 Skills
 Languages: Python, Go, TypeScript
 Tools: Docker, Kubernetes, PostgreSQL, Redis
+
+Projects
+Resume Bot | Python, FastMCP
+A side project that serves resume data over the Model Context Protocol.
 
 Education
 BS Computer Science, University of Oregon, 2016
@@ -215,6 +223,20 @@ class TestServerEmptyDir(unittest.TestCase):
         result = get_badge_skill("nonexistent-id")
         self.assertIsInstance(result, str)
         self.assertIn("Error", result)
+
+    def test_list_side_projects_empty(self):
+        self.assertEqual(list_side_projects(), [])
+
+    def test_get_side_project_unknown_returns_error(self):
+        result = get_side_project("nonexistent-id")
+        self.assertIsInstance(result, str)
+        self.assertIn("Error", result)
+
+    def test_search_side_projects_empty(self):
+        self.assertEqual(search_side_projects("python"), [])
+
+    def test_search_side_projects_by_technology_empty(self):
+        self.assertEqual(search_side_projects_by_technology("python"), [])
 
 
 # ── Collection-layer tools ────────────────────────────────────────────────────
@@ -524,6 +546,78 @@ class TestGetBadgeSkill(_ServerFixture):
         self.assertIsInstance(result, str)
         self.assertIn("Error", result)
         self.assertIn("no-such-id", result)
+
+
+class TestListSideProjects(_ServerFixture):
+    def test_returns_results(self):
+        results = list_side_projects()
+        self.assertGreater(len(results), 0)
+        self.assertTrue(any(p["name"] == "Resume Bot" for p in results))
+
+    def test_resume_id_filter(self):
+        all_results = list_side_projects()
+        resume_id = next(p for p in search_resumes_by_name("Jane"))["id"]
+        results = list_side_projects(resume_id=resume_id)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["name"], "Resume Bot")
+        self.assertGreaterEqual(len(all_results), len(results))
+
+    def test_results_are_serialisable(self):
+        import json
+        json.dumps(list_side_projects())
+
+
+class TestGetSideProject(_ServerFixture):
+    def test_known_id_returns_dict(self):
+        project_id = list_side_projects()[0]["id"]
+        result = get_side_project(project_id)
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result["id"], project_id)
+        self.assertIn("technologies", result)
+
+    def test_unknown_id_returns_error_string(self):
+        result = get_side_project("no-such-id")
+        self.assertIsInstance(result, str)
+        self.assertIn("Error", result)
+        self.assertIn("no-such-id", result)
+
+
+class TestSearchSideProjects(_ServerFixture):
+    def test_match_by_name(self):
+        results = search_side_projects("Resume Bot")
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["name"], "Resume Bot")
+        self.assertIn("resume_id", results[0])
+
+    def test_match_by_description(self):
+        results = search_side_projects("Model Context Protocol")
+        self.assertEqual(len(results), 1)
+
+    def test_no_match_returns_empty(self):
+        self.assertEqual(search_side_projects("quantum entanglement"), [])
+
+    def test_results_are_serialisable(self):
+        import json
+        json.dumps(search_side_projects("Resume"))
+
+
+class TestSearchSideProjectsByTechnology(_ServerFixture):
+    def test_match_returns_results(self):
+        results = search_side_projects_by_technology("Python")
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["name"], "Resume Bot")
+        self.assertIn("Python", results[0]["matched_technologies"])
+
+    def test_partial_match(self):
+        results = search_side_projects_by_technology("fastmcp")
+        self.assertEqual(len(results), 1)
+
+    def test_no_match_returns_empty(self):
+        self.assertEqual(search_side_projects_by_technology("COBOL"), [])
+
+    def test_results_are_serialisable(self):
+        import json
+        json.dumps(search_side_projects_by_technology("Python"))
 
 
 # ── Search tools ──────────────────────────────────────────────────────────────

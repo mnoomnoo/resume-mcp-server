@@ -326,6 +326,56 @@ def get_badge_skill(id: str) -> dict[str, Any] | str:
     return result.model_dump()
 
 
+@mcp.tool()
+def list_side_projects(resume_id: str | None = None) -> list[dict[str, Any]]:
+    """List side projects (personal/portfolio projects, distinct from work experience)
+    that demonstrate competency with specific technologies, optionally filtered to a resume.
+
+    Args:
+        resume_id: Optional resume ID from list_resume_summaries to filter results
+    """
+    results = _get_repo().list_side_projects(resume_id=resume_id)
+    return [r.model_dump() for r in results]
+
+
+@mcp.tool()
+def get_side_project(id: str) -> dict[str, Any] | str:
+    """Get a single side project by ID, including the technologies it demonstrates.
+
+    Args:
+        id: Side project ID from list_side_projects
+    """
+    result = _get_repo().find_side_project(id)
+    if result is None:
+        return f"Error: side project {id!r} not found"
+    return result.model_dump()
+
+
+@mcp.tool()
+def search_side_projects(query: str, resume_id: str | None = None) -> list[dict[str, Any]]:
+    """Search side projects by name, description, or associated technology.
+
+    Each result includes a resume_id field identifying which resume the project belongs to.
+
+    Args:
+        query: Text to search for (case-insensitive)
+        resume_id: Optional resume ID to scope the search to one resume
+    """
+    return _get_repo().search_side_projects(query, resume_id)
+
+
+@mcp.tool()
+def search_side_projects_by_technology(technology: str) -> list[dict[str, Any]]:
+    """Find side projects that demonstrate competency with a given technology.
+
+    Each result includes: id, name, description, matched_technologies, resume_id.
+
+    Args:
+        technology: Technology/skill name fragment to search for (case-insensitive, partial match)
+    """
+    return _get_repo().search_side_projects_by_technology(technology)
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
     transport = os.environ.get("FASTMCP_TRANSPORT", "stdio")

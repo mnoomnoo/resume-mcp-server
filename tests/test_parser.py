@@ -5,6 +5,7 @@ import unittest
 from resume_mcp_server.parser import (
     _extract_contact,
     _find_sections,
+    _parse_projects,
     _parse_skills,
     _parse_work_modern,
     _split_company_title,
@@ -187,6 +188,58 @@ class TestParseWorkModern(unittest.TestCase):
         self.assertIn("microservice", entries[0].achievements[0].desc)
 
 
+# ── _parse_projects ───────────────────────────────────────────────────────────
+
+class TestParseProjects(unittest.TestCase):
+    def test_pipe_separated_header_with_technologies(self):
+        lines = [
+            "Resume Bot | Python, FastMCP, Docker",
+            "A tool that serves resume data over MCP.",
+        ]
+        projects = _parse_projects(lines)
+        self.assertEqual(len(projects), 1)
+        self.assertEqual(projects[0].name, "Resume Bot")
+        self.assertEqual(
+            [t.title for t in projects[0].technologies], ["Python", "FastMCP", "Docker"]
+        )
+        self.assertIn("serves resume data", projects[0].description)
+
+    def test_header_without_separator_has_no_technologies(self):
+        lines = ["Personal Website", "A portfolio site built with static HTML."]
+        projects = _parse_projects(lines)
+        self.assertEqual(len(projects), 1)
+        self.assertEqual(projects[0].name, "Personal Website")
+        self.assertEqual(projects[0].technologies, [])
+
+    def test_multi_line_description_is_joined(self):
+        lines = [
+            "Resume Bot | Python",
+            "First line of the description.",
+            "• Second line with a bullet.",
+        ]
+        projects = _parse_projects(lines)
+        self.assertEqual(len(projects), 1)
+        self.assertIn("First line of the description.", projects[0].description)
+        self.assertIn("Second line with a bullet.", projects[0].description)
+
+    def test_multiple_projects_separated_by_blank_lines(self):
+        lines = [
+            "Resume Bot | Python, FastMCP",
+            "Serves resume data over MCP.",
+            "",
+            "Game Engine | C++, OpenGL",
+            "A small 3D rendering engine.",
+        ]
+        projects = _parse_projects(lines)
+        self.assertEqual(len(projects), 2)
+        self.assertEqual(projects[0].name, "Resume Bot")
+        self.assertEqual(projects[1].name, "Game Engine")
+        self.assertEqual([t.title for t in projects[1].technologies], ["C++", "OpenGL"])
+
+    def test_empty_input_returns_no_projects(self):
+        self.assertEqual(_parse_projects([]), [])
+
+
 # ── parse_resume integration ──────────────────────────────────────────────────
 
 _SAMPLE_RESUME = """\
@@ -211,6 +264,10 @@ Skills
 Languages: Python, Go, Rust
 Tools: Docker, Kubernetes, PostgreSQL
 
+Projects
+Resume Bot | Python, FastMCP
+A tool that serves resume data over MCP.
+
 Education
 BS Computer Science, University of Oregon, 2019
 """
@@ -228,6 +285,11 @@ class TestParseResume(unittest.TestCase):
         self.assertGreaterEqual(len(result.badge_skills), 3)
         self.assertNotEqual(result.professional_statement, "")
         self.assertNotEqual(result.education, "")
+        self.assertEqual(len(result.side_projects), 1)
+        self.assertEqual(result.side_projects[0].name, "Resume Bot")
+        self.assertEqual(
+            [t.title for t in result.side_projects[0].technologies], ["Python", "FastMCP"]
+        )
 
     def test_empty_returns_none(self):
         self.assertIsNone(parse_resume("", "resume.docx"))
