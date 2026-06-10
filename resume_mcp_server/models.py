@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 from datetime import datetime, timezone
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 ID = str
 
@@ -47,6 +47,15 @@ class SideProjectModel(BaseModel):
     technologies: list[ID]
 
 
+class EducationModel(BaseModel):
+    id: ID
+    created_at: str
+    institution: str
+    degree: str
+    year: str
+    competencies: list[ID]
+
+
 class ResumeModel(BaseModel):
     id: ID
     created_at: str
@@ -60,6 +69,7 @@ class ResumeModel(BaseModel):
     work_experiences: list[ID]
     badge_skills: list[ID]
     side_projects: list[ID]
+    education_entries: list[ID]
 
 
 # ── Create schemas ────────────────────────────────────────────────────────────
@@ -86,6 +96,13 @@ class SideProjectCreate(BaseModel):
     technologies: list[BadgeSkillCreate]
 
 
+class EducationCreate(BaseModel):
+    institution: str
+    degree: str
+    year: str
+    competencies: list[BadgeSkillCreate]
+
+
 class ResumeCreate(BaseModel):
     first_name: str
     last_name: str
@@ -97,6 +114,7 @@ class ResumeCreate(BaseModel):
     work_experiences: list[WorkExperienceCreate]
     badge_skills: list[BadgeSkillCreate]
     side_projects: list[SideProjectCreate]
+    education_entries: list[EducationCreate] = Field(default_factory=list)
 
 
 # ── Response schemas (nested, resolved) ─────────────────────────────────────
@@ -131,6 +149,15 @@ class SideProjectResponse(BaseModel):
     technologies: list[BadgeSkillResponse]
 
 
+class EducationResponse(BaseModel):
+    id: ID
+    created_at: str
+    institution: str
+    degree: str
+    year: str
+    competencies: list[BadgeSkillResponse]
+
+
 class ResumeResponse(BaseModel):
     id: ID
     created_at: str
@@ -144,3 +171,4 @@ class ResumeResponse(BaseModel):
     work_experiences: list[WorkExperienceResponse]
     badge_skills: list[BadgeSkillResponse]
     side_projects: list[SideProjectResponse]
+    education_entries: list[EducationResponse]

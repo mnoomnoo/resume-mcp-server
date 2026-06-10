@@ -376,6 +376,57 @@ def search_side_projects_by_technology(technology: str) -> list[dict[str, Any]]:
     return _get_repo().search_side_projects_by_technology(technology)
 
 
+@mcp.tool()
+def list_education(resume_id: str | None = None) -> list[dict[str, Any]]:
+    """List education entries (degree, institution, year, and relevant coursework/competencies),
+    optionally filtered to a resume.
+
+    Args:
+        resume_id: Optional resume ID from list_resume_summaries to filter results
+    """
+    results = _get_repo().list_education(resume_id=resume_id)
+    return [r.model_dump() for r in results]
+
+
+@mcp.tool()
+def get_education(id: str) -> dict[str, Any] | str:
+    """Get a single education entry by ID, including its competencies.
+
+    Args:
+        id: Education entry ID from list_education
+    """
+    result = _get_repo().find_education(id)
+    if result is None:
+        return f"Error: education entry {id!r} not found"
+    return result.model_dump()
+
+
+@mcp.tool()
+def search_education(query: str, resume_id: str | None = None) -> list[dict[str, Any]]:
+    """Search education entries by institution, degree, or competency.
+
+    Each result includes a resume_id field identifying which resume the entry belongs to.
+
+    Args:
+        query: Text to search for (case-insensitive)
+        resume_id: Optional resume ID to scope the search to one resume
+    """
+    return _get_repo().search_education(query, resume_id)
+
+
+@mcp.tool()
+def search_education_by_competency(competency: str) -> list[dict[str, Any]]:
+    """Find education entries that demonstrate competency with a given skill — useful for
+    matching a candidate's coursework/training to a specific position's requirements.
+
+    Each result includes: id, institution, degree, year, matched_competencies, resume_id.
+
+    Args:
+        competency: Skill/competency name fragment to search for (case-insensitive, partial match)
+    """
+    return _get_repo().search_education_by_competency(competency)
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
     transport = os.environ.get("FASTMCP_TRANSPORT", "stdio")

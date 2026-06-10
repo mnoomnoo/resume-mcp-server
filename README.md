@@ -15,7 +15,7 @@ Supports `.docx`, `.pdf`, `.md`, and `.txt` files, including nested subdirectori
 
 ## Quick Start
 
-Give Claude structured access to your resume collection. The server parses your documents on startup and exposes 20 tools for searching by name, company, skill, side project, or full text — with automatic hot-reload when files change.
+Give Claude structured access to your resume collection. The server parses your documents on startup and exposes 21 tools for searching by name, company, skill, education, side project, or full text — with automatic hot-reload when files change.
 
 **Try it immediately with the included sample resumes:**
 
@@ -458,3 +458,46 @@ Find side projects that demonstrate competency with a given technology.
 | `technology` | string | Technology/skill name fragment to search for (case-insensitive, partial match) |
 
 Returns: `id`, `name`, `description`, `matched_technologies`, `resume_id`.
+
+---
+
+### `list_education`
+
+List education entries (degree, institution, year, and relevant coursework/competencies), optionally scoped to a single resume.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `resume_id` | string (optional) | Resume ID from `list_resume_summaries` |
+
+---
+
+### `get_education`
+
+Get a single education entry by ID, including its competencies.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `id` | string | Education entry ID from `list_education` |
+
+---
+
+### `search_education`
+
+Search education entries by institution, degree, or competency. Each result includes a `resume_id` field identifying which resume the entry belongs to.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `query` | string | Text to search for (case-insensitive) |
+| `resume_id` | string (optional) | Resume ID to scope the search to one resume |
+
+---
+
+### `search_education_by_competency`
+
+Find education entries that demonstrate competency with a given skill — useful for matching a candidate's coursework/training to a specific position's requirements.
+
+Returns: `id`, `institution`, `degree`, `year`, `matched_competencies`, `resume_id`.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `competency` | string | Skill/competency name fragment to search for (case-insensitive, partial match) |
