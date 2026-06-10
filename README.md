@@ -47,7 +47,15 @@ cp .env.example .env
 # then edit RESUME_DIR_HOST in .env
 ```
 
-### 2. Build and start
+### 2. Sync the image version (optional)
+
+Stamp the image with the current `pyproject.toml` version:
+
+```bash
+python scripts/sync_version.py
+```
+
+### 3. Build and start
 
 ```bash
 docker compose build resume-mcp
@@ -56,7 +64,7 @@ docker compose up -d
 
 The server is now available at `http://localhost:8001/mcp`.
 
-### 3. Connect your AI client
+### 4. Connect your AI client
 
 **Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
 
