@@ -444,6 +444,7 @@ def main() -> None:
             allow_origins=allow_origins,
             allow_methods=["*"],
             allow_headers=["*"],
+            expose_headers=["Mcp-Session-Id"],
         )
         mcp.run(transport=transport, host=host, port=port, middleware=[cors])
 
