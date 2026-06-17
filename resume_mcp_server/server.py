@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any
 
 from fastmcp import FastMCP
+from starlette.middleware import Middleware
+from starlette.middleware.cors import CORSMiddleware
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
@@ -435,7 +437,15 @@ def main() -> None:
     if transport == "stdio":
         mcp.run(transport=transport)
     else:
-        mcp.run(transport=transport, host=host, port=port)
+        raw_origins = os.environ.get("FASTMCP_CORS_ORIGINS", "*")
+        allow_origins = [o.strip() for o in raw_origins.split(",")] if raw_origins != "*" else ["*"]
+        cors = Middleware(
+            CORSMiddleware,
+            allow_origins=allow_origins,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+        mcp.run(transport=transport, host=host, port=port, middleware=[cors])
 
 
 if __name__ == "__main__":
