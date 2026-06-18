@@ -10,6 +10,14 @@ from .models import (
 )
 
 
+def _make_matcher(query: str, mode: str = "and"):
+    tokens = query.split() or [query]
+    patterns = [re.compile(re.escape(t), re.IGNORECASE) for t in tokens]
+    if mode.lower() == "and":
+        return lambda text: all(p.search(text) for p in patterns)
+    return lambda text: any(p.search(text) for p in patterns)
+
+
 class ResumeRepository:
     def __init__(self) -> None:
         self._badge_skills: list[BadgeSkillModel] = []
@@ -325,24 +333,24 @@ class ResumeRepository:
 
     # ── Search ────────────────────────────────────────────────────────────────
 
-    def search_badge_skills(self, query: str) -> list[BadgeSkillResponse]:
-        pattern = re.compile(re.escape(query), re.IGNORECASE)
+    def search_badge_skills(self, query: str, mode: str = "and") -> list[BadgeSkillResponse]:
+        matches = _make_matcher(query, mode)
         return [
             self._badge_skill_to_response(s)
             for s in self._badge_skills
-            if pattern.search(s.title)
+            if matches(s.title)
         ]
 
-    def search_work_experiences(self, query: str) -> list[dict]:
-        pattern = re.compile(re.escape(query), re.IGNORECASE)
+    def search_work_experiences(self, query: str, mode: str = "and") -> list[dict]:
+        matches = _make_matcher(query, mode)
         results = []
         for we in self._work_experiences:
-            if pattern.search(we.company_name) or pattern.search(we.position_title):
+            if matches(we.company_name) or matches(we.position_title):
                 hit = True
             else:
                 hit = any(
                     (ach := self._achievements_by_id.get(aid)) is not None
-                    and pattern.search(ach.desc)
+                    and matches(ach.desc)
                     for aid in we.achievements
                 )
             if hit:
@@ -351,15 +359,15 @@ class ResumeRepository:
                 results.append(result)
         return results
 
-    def search_achievements(self, query: str, resume_id: ID | None = None) -> list[dict]:
-        pattern = re.compile(re.escape(query), re.IGNORECASE)
+    def search_achievements(self, query: str, resume_id: ID | None = None, mode: str = "and") -> list[dict]:
+        matches = _make_matcher(query, mode)
         results = []
         for we in self._work_experiences:
             if resume_id is not None and self._work_experience_to_resume.get(we.id) != resume_id:
                 continue
             for aid in we.achievements:
                 ach = self._achievements_by_id.get(aid)
-                if ach and pattern.search(ach.desc):
+                if ach and matches(ach.desc):
                     results.append({
                         "id": ach.id,
                         "desc": ach.desc,
@@ -370,8 +378,8 @@ class ResumeRepository:
                     })
         return results
 
-    def search_side_projects(self, query: str, resume_id: ID | None = None) -> list[dict]:
-        pattern = re.compile(re.escape(query), re.IGNORECASE)
+    def search_side_projects(self, query: str, resume_id: ID | None = None, mode: str = "and") -> list[dict]:
+        matches = _make_matcher(query, mode)
         results = []
         for p in self._side_projects:
             if resume_id is not None and self._side_project_to_resume.get(p.id) != resume_id:
@@ -382,9 +390,9 @@ class ResumeRepository:
                 if tid in self._badge_skills_by_id
             ]
             hit = (
-                pattern.search(p.name)
-                or pattern.search(p.description)
-                or any(pattern.search(t) for t in tech_titles)
+                matches(p.name)
+                or matches(p.description)
+                or any(matches(t) for t in tech_titles)
             )
             if hit:
                 result = self._side_project_to_response(p).model_dump()
@@ -392,9 +400,9 @@ class ResumeRepository:
                 results.append(result)
         return results
 
-    def search_side_projects_by_technology(self, technology: str) -> list[dict]:
-        pattern = re.compile(re.escape(technology), re.IGNORECASE)
-        matching_ids = {s.id for s in self._badge_skills if pattern.search(s.title)}
+    def search_side_projects_by_technology(self, technology: str, mode: str = "and") -> list[dict]:
+        matches = _make_matcher(technology, mode)
+        matching_ids = {s.id for s in self._badge_skills if matches(s.title)}
         if not matching_ids:
             return []
         results = []
@@ -411,8 +419,8 @@ class ResumeRepository:
                 })
         return results
 
-    def search_resumes_by_name(self, query: str) -> list[dict]:
-        pattern = re.compile(re.escape(query), re.IGNORECASE)
+    def search_resumes_by_name(self, query: str, mode: str = "and") -> list[dict]:
+        matches = _make_matcher(query, mode)
         return [
             {
                 "id": r.id,
@@ -422,11 +430,11 @@ class ResumeRepository:
                 "phone_num": r.phone_num,
             }
             for r in self._resumes
-            if pattern.search(r.first_name) or pattern.search(r.last_name)
+            if matches(r.first_name) or matches(r.last_name)
         ]
 
-    def search_education(self, query: str, resume_id: ID | None = None) -> list[dict]:
-        pattern = re.compile(re.escape(query), re.IGNORECASE)
+    def search_education(self, query: str, resume_id: ID | None = None, mode: str = "and") -> list[dict]:
+        matches = _make_matcher(query, mode)
         results = []
         for e in self._education:
             if resume_id is not None and self._education_to_resume.get(e.id) != resume_id:
@@ -437,9 +445,9 @@ class ResumeRepository:
                 if cid in self._badge_skills_by_id
             ]
             hit = (
-                pattern.search(e.institution)
-                or pattern.search(e.degree)
-                or any(pattern.search(t) for t in competency_titles)
+                matches(e.institution)
+                or matches(e.degree)
+                or any(matches(t) for t in competency_titles)
             )
             if hit:
                 result = self._education_to_response(e).model_dump()
@@ -447,9 +455,9 @@ class ResumeRepository:
                 results.append(result)
         return results
 
-    def search_education_by_competency(self, competency: str) -> list[dict]:
-        pattern = re.compile(re.escape(competency), re.IGNORECASE)
-        matching_ids = {s.id for s in self._badge_skills if pattern.search(s.title)}
+    def search_education_by_competency(self, competency: str, mode: str = "and") -> list[dict]:
+        matches = _make_matcher(competency, mode)
+        matching_ids = {s.id for s in self._badge_skills if matches(s.title)}
         if not matching_ids:
             return []
         results = []
@@ -467,9 +475,9 @@ class ResumeRepository:
                 })
         return results
 
-    def search_resumes_by_skill(self, skill: str) -> list[dict]:
-        pattern = re.compile(re.escape(skill), re.IGNORECASE)
-        matching_ids = {s.id for s in self._badge_skills if pattern.search(s.title)}
+    def search_resumes_by_skill(self, skill: str, mode: str = "and") -> list[dict]:
+        matches = _make_matcher(skill, mode)
+        matching_ids = {s.id for s in self._badge_skills if matches(s.title)}
         if not matching_ids:
             return []
         results = []

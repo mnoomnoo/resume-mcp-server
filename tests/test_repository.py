@@ -253,6 +253,24 @@ class TestSearchBadgeSkills(unittest.TestCase):
         results = repo.search_badge_skills("script")
         self.assertEqual({s.title for s in results}, {"JavaScript", "TypeScript"})
 
+    def test_multi_token_and_all_present(self):
+        repo = ResumeRepository()
+        repo.add_resume(_make_resume(skills=["Machine Learning"]))
+        results = repo.search_badge_skills("Machine Learning")
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].title, "Machine Learning")
+
+    def test_multi_token_and_one_missing(self):
+        repo = ResumeRepository()
+        repo.add_resume(_make_resume(skills=["Machine"]))
+        self.assertEqual(repo.search_badge_skills("Machine Learning"), [])
+
+    def test_multi_token_or_any_present(self):
+        repo = ResumeRepository()
+        repo.add_resume(_make_resume(skills=["Machine", "Learning"]))
+        results = repo.search_badge_skills("Machine Learning", mode="or")
+        self.assertEqual(len(results), 2)
+
 
 # ── search_work_experiences ───────────────────────────────────────────────────
 
@@ -326,6 +344,53 @@ class TestSearchWorkExperiences(unittest.TestCase):
         self.repo.add_resume(_make_resume(companies=["Acme", "Globex"]))
         results = self.repo.search_work_experiences("Engineer")
         self.assertTrue(all("resume_id" in r for r in results))
+
+    def test_multi_token_and_both_in_company(self):
+        we = WorkExperienceCreate(
+            company_name="Acme Corporation", position_title="Dev",
+            start_date="Jan 2020", end_date="Present",
+            achievements=[AchievementCreate(desc="Built pipelines")],
+        )
+        resume = ResumeCreate(
+            first_name="Test", last_name="User", email="t@example.com", phone_num="555",
+            address="", professional_statement="", education="",
+            work_experiences=[we], badge_skills=[], side_projects=[],
+        )
+        self.repo.add_resume(resume)
+        results = self.repo.search_work_experiences("Acme Corporation")
+        self.assertEqual(len(results), 1)
+
+    def test_multi_token_and_tokens_split_across_fields_no_match(self):
+        we = WorkExperienceCreate(
+            company_name="Google", position_title="Senior Engineer",
+            start_date="Jan 2022", end_date="Present",
+            achievements=[AchievementCreate(desc="Built APIs")],
+        )
+        resume = ResumeCreate(
+            first_name="Test", last_name="User", email="t@example.com", phone_num="555",
+            address="", professional_statement="", education="",
+            work_experiences=[we], badge_skills=[], side_projects=[],
+        )
+        self.repo.add_resume(resume)
+        # AND: "Google" in company_name, "Engineer" in position_title — different fields, no match
+        results = self.repo.search_work_experiences("Google Engineer")
+        self.assertEqual(results, [])
+
+    def test_multi_token_or_tokens_across_fields_matches(self):
+        we = WorkExperienceCreate(
+            company_name="Google", position_title="Senior Engineer",
+            start_date="Jan 2022", end_date="Present",
+            achievements=[AchievementCreate(desc="Built APIs")],
+        )
+        resume = ResumeCreate(
+            first_name="Test", last_name="User", email="t@example.com", phone_num="555",
+            address="", professional_statement="", education="",
+            work_experiences=[we], badge_skills=[], side_projects=[],
+        )
+        self.repo.add_resume(resume)
+        # OR: "Google" matches company_name field
+        results = self.repo.search_work_experiences("Google Engineer", mode="or")
+        self.assertEqual(len(results), 1)
 
 
 # ── list_resume_summaries ─────────────────────────────────────────────────────
@@ -509,6 +574,143 @@ class TestSearchAchievements(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertIn("latency", results[0]["desc"])
 
+    def _make_two_token_resume(self):
+        return ResumeCreate(
+            first_name="Test", last_name="User",
+            email="t@example.com", phone_num="555",
+            address="", professional_statement="", education="",
+            work_experiences=[
+                WorkExperienceCreate(
+                    company_name="TestCo", position_title="Dev",
+                    start_date="Jan 2020", end_date="Present",
+                    achievements=[
+                        AchievementCreate(desc="Reduced latency and improved throughput"),
+                        AchievementCreate(desc="Reduced latency only"),
+                    ],
+                ),
+            ],
+            badge_skills=[], side_projects=[],
+        )
+
+    def test_multi_token_and_both_present(self):
+        self.repo.add_resume(self._make_two_token_resume())
+        results = self.repo.search_achievements("latency throughput")
+        self.assertEqual(len(results), 1)
+        self.assertIn("throughput", results[0]["desc"])
+
+    def test_multi_token_and_one_missing(self):
+        self.repo.add_resume(ResumeCreate(
+            first_name="Test", last_name="User",
+            email="t@example.com", phone_num="555",
+            address="", professional_statement="", education="",
+            work_experiences=[WorkExperienceCreate(
+                company_name="TestCo", position_title="Dev",
+                start_date="Jan 2020", end_date="Present",
+                achievements=[AchievementCreate(desc="Reduced latency")],
+            )],
+            badge_skills=[], side_projects=[],
+        ))
+        self.assertEqual(self.repo.search_achievements("latency throughput"), [])
+
+    def test_multi_token_and_explicit_mode(self):
+        self.repo.add_resume(self._make_two_token_resume())
+        results = self.repo.search_achievements("latency throughput", mode="and")
+        self.assertEqual(len(results), 1)
+
+    def test_multi_token_or_any_present(self):
+        self.repo.add_resume(self._make_two_token_resume())
+        results = self.repo.search_achievements("latency throughput", mode="or")
+        self.assertEqual(len(results), 2)
+
+    def test_multi_token_or_none_present(self):
+        self.repo.add_resume(ResumeCreate(
+            first_name="Test", last_name="User",
+            email="t@example.com", phone_num="555",
+            address="", professional_statement="", education="",
+            work_experiences=[WorkExperienceCreate(
+                company_name="TestCo", position_title="Dev",
+                start_date="Jan 2020", end_date="Present",
+                achievements=[AchievementCreate(desc="Fixed a bug")],
+            )],
+            badge_skills=[], side_projects=[],
+        ))
+        self.assertEqual(self.repo.search_achievements("latency throughput", mode="or"), [])
+
+    def test_or_returns_superset_of_and(self):
+        self.repo.add_resume(self._make_two_token_resume())
+        and_results = self.repo.search_achievements("latency throughput", mode="and")
+        or_results = self.repo.search_achievements("latency throughput", mode="or")
+        self.assertLess(len(and_results), len(or_results))
+
+    def test_leading_trailing_spaces_same_as_trimmed(self):
+        self.repo.add_resume(ResumeCreate(
+            first_name="Test", last_name="User",
+            email="t@example.com", phone_num="555",
+            address="", professional_statement="", education="",
+            work_experiences=[WorkExperienceCreate(
+                company_name="TestCo", position_title="Dev",
+                start_date="Jan 2020", end_date="Present",
+                achievements=[AchievementCreate(desc="Reduced latency by 40%")],
+            )],
+            badge_skills=[], side_projects=[],
+        ))
+        self.assertEqual(
+            self.repo.search_achievements("  latency  "),
+            self.repo.search_achievements("latency"),
+        )
+
+    def test_multiple_spaces_between_tokens(self):
+        self.repo.add_resume(ResumeCreate(
+            first_name="Test", last_name="User",
+            email="t@example.com", phone_num="555",
+            address="", professional_statement="", education="",
+            work_experiences=[WorkExperienceCreate(
+                company_name="TestCo", position_title="Dev",
+                start_date="Jan 2020", end_date="Present",
+                achievements=[AchievementCreate(desc="Reduced latency and improved throughput")],
+            )],
+            badge_skills=[], side_projects=[],
+        ))
+        self.assertEqual(
+            self.repo.search_achievements("latency  throughput"),
+            self.repo.search_achievements("latency throughput"),
+        )
+
+    def test_token_case_insensitive(self):
+        self.repo.add_resume(ResumeCreate(
+            first_name="Test", last_name="User",
+            email="t@example.com", phone_num="555",
+            address="", professional_statement="", education="",
+            work_experiences=[WorkExperienceCreate(
+                company_name="TestCo", position_title="Dev",
+                start_date="Jan 2020", end_date="Present",
+                achievements=[AchievementCreate(desc="Reduced latency and improved throughput")],
+            )],
+            badge_skills=[], side_projects=[],
+        ))
+        results = self.repo.search_achievements("LATENCY THROUGHPUT")
+        self.assertEqual(len(results), 1)
+
+    def test_invalid_mode_falls_back_to_or(self):
+        self.repo.add_resume(ResumeCreate(
+            first_name="Test", last_name="User",
+            email="t@example.com", phone_num="555",
+            address="", professional_statement="", education="",
+            work_experiences=[WorkExperienceCreate(
+                company_name="TestCo", position_title="Dev",
+                start_date="Jan 2020", end_date="Present",
+                achievements=[
+                    AchievementCreate(desc="Reduced latency by 40%"),
+                    AchievementCreate(desc="Fixed a bug"),
+                ],
+            )],
+            badge_skills=[], side_projects=[],
+        ))
+        # unrecognized mode falls to OR branch
+        results = self.repo.search_achievements("latency throughput", mode="xor")
+        self.assertEqual(len(results), 1)
+        self.assertIn("latency", results[0]["desc"])
+
 
 # ── side projects ────────────────────────────────────────────────────────────
 
@@ -610,6 +812,53 @@ class TestSideProjects(unittest.TestCase):
         project_tech_id = resp.side_projects[0].technologies[0].id
         self.assertEqual(skill_id, project_tech_id)
 
+    def test_search_by_technology_multi_token_and_full_phrase(self):
+        self.repo.add_resume(_make_resume(
+            projects=[self._project(name="Mobile App", techs=["React Native", "TypeScript"])]
+        ))
+        results = self.repo.search_side_projects_by_technology("React Native")
+        self.assertEqual(len(results), 1)
+        self.assertIn("React Native", results[0]["matched_technologies"])
+
+    def test_search_by_technology_multi_token_and_no_partial(self):
+        self.repo.add_resume(_make_resume(
+            projects=[self._project(name="Web App", techs=["React", "TypeScript"])]
+        ))
+        # AND: both "React" and "Native" must be in the same tech title
+        results = self.repo.search_side_projects_by_technology("React Native", mode="and")
+        self.assertEqual(results, [])
+
+    def test_search_by_technology_multi_token_or_matches_either(self):
+        self.repo.add_resume(_make_resume(
+            projects=[self._project(name="Web App", techs=["React", "TypeScript"])]
+        ))
+        # OR: "React" matches
+        results = self.repo.search_side_projects_by_technology("React Native", mode="or")
+        self.assertEqual(len(results), 1)
+        self.assertIn("React", results[0]["matched_technologies"])
+
+    def test_search_side_projects_multi_token_and(self):
+        self.repo.add_resume(_make_resume(
+            projects=[self._project(name="Finance Tracker", desc="Tracks personal finances")]
+        ))
+        results = self.repo.search_side_projects("Finance Tracker")
+        self.assertEqual(len(results), 1)
+
+    def test_search_side_projects_multi_token_and_one_missing(self):
+        self.repo.add_resume(_make_resume(
+            projects=[self._project(name="Finance App", desc="Tracks expenses")]
+        ))
+        # "Finance" in name but "Tracker" nowhere
+        results = self.repo.search_side_projects("Finance Tracker")
+        self.assertEqual(results, [])
+
+    def test_search_side_projects_multi_token_or(self):
+        self.repo.add_resume(_make_resume(
+            projects=[self._project(name="Finance App", desc="Tracks expenses")]
+        ))
+        results = self.repo.search_side_projects("Finance Tracker", mode="or")
+        self.assertEqual(len(results), 1)
+
 
 # ── search_resumes_by_name ────────────────────────────────────────────────────
 
@@ -653,6 +902,28 @@ class TestSearchResumesByName(unittest.TestCase):
         resp_b = self.repo.add_resume(_make_resume("Max", "Morris"))
         results = self.repo.search_resumes_by_name("Ma")
         self.assertEqual({r["id"] for r in results}, {resp_a.id, resp_b.id})
+
+    def test_multi_token_and_both_in_same_field(self):
+        # compound first name — both tokens in one field
+        self.repo.add_resume(_make_resume("Mary Jane", "Watson"))
+        results = self.repo.search_resumes_by_name("Mary Jane")
+        self.assertEqual(len(results), 1)
+
+    def test_multi_token_and_split_across_fields_no_match(self):
+        # AND: "Hannah" in first_name but "Doe" in last_name — neither field holds both
+        self.repo.add_resume(_make_resume("Hannah", "Doe"))
+        results = self.repo.search_resumes_by_name("Hannah Doe")
+        self.assertEqual(results, [])
+
+    def test_multi_token_or_matches_first_name(self):
+        self.repo.add_resume(_make_resume("Hannah", "Doe"))
+        results = self.repo.search_resumes_by_name("Hannah Zephyr", mode="or")
+        self.assertEqual(len(results), 1)
+
+    def test_multi_token_or_no_match(self):
+        self.repo.add_resume(_make_resume("Hannah", "Doe"))
+        results = self.repo.search_resumes_by_name("Zephyr Quantum", mode="or")
+        self.assertEqual(results, [])
 
 
 # ── search_resumes_by_skill ───────────────────────────────────────────────────
@@ -702,6 +973,24 @@ class TestSearchResumesBySkill(unittest.TestCase):
         results = self.repo.search_badge_skills("py")
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].title, "Python")
+
+    def test_multi_token_and_full_phrase_match(self):
+        resp = self.repo.add_resume(_make_resume(skills=["Machine Learning", "Python"]))
+        results = self.repo.search_resumes_by_skill("Machine Learning")
+        self.assertEqual(len(results), 1)
+        self.assertIn("Machine Learning", results[0]["matched_skills"])
+
+    def test_multi_token_and_no_match_when_words_split(self):
+        # "Machine" and "Learning" are separate skills — AND requires both in same skill title
+        self.repo.add_resume(_make_resume(skills=["Machine", "Learning", "Python"]))
+        results = self.repo.search_resumes_by_skill("Machine Learning", mode="and")
+        self.assertEqual(results, [])
+
+    def test_multi_token_or_matches_either_skill(self):
+        resp = self.repo.add_resume(_make_resume(skills=["Machine", "Python"]))
+        results = self.repo.search_resumes_by_skill("Machine Learning", mode="or")
+        self.assertEqual(len(results), 1)
+        self.assertIn("Machine", results[0]["matched_skills"])
 
 
 # ── education ─────────────────────────────────────────────────────────────────
