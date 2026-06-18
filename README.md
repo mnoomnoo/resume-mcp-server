@@ -7,15 +7,17 @@
 [![PyPI](https://img.shields.io/pypi/v/resume-mcp-server)](https://pypi.org/project/resume-mcp-server/)
 [![resume-mcp-server MCP server](https://glama.ai/mcp/servers/mnoomnoo/resume-mcp-server/badges/score.svg)](https://glama.ai/mcp/servers/mnoomnoo/resume-mcp-server)
 
-An MCP server for browsing and searching job application documents — resumes, cover letters, and related materials.
+An MCP server that gives Claude (or any MCP client) structured, searchable access to your resume collection — resumes, cover letters, and application materials in `.docx`, `.pdf`, `.md`, or `.txt` format.
 
-Supports `.docx`, `.pdf`, `.md`, and `.txt` files, including nested subdirectories.
+Job seekers accumulate document sprawl fast: multiple resume versions tailored to different roles, cover letter drafts, reference sheets. Manually digging through them to draft a new application is tedious. Point this server at your resume folder and Claude can answer questions like *"which of my resumes highlights Kubernetes experience?"*, *"what achievements have I listed across my backend roles?"*, or *"draft a cover letter drawing from my work at Acme Corp"* — without you pasting anything.
+
+The server parses each document into structured data (contact info, work history, education, skills, side projects) and exposes 24 tools covering full-text search, skill lookup, company and role queries, achievement mining, education search, and more. Files are watched and re-indexed automatically, so edits to your documents are reflected immediately.
 
 ---
 
 ## Quick Start
 
-Give Claude structured access to your resume collection. The server parses your documents on startup and exposes 21 tools for searching by name, company, skill, education, side project, or full text — with automatic hot-reload when files change.
+Give Claude structured access to your resume collection. The server parses your documents on startup and exposes 24 tools for searching by name, company, skill, education, side project, or full text — with automatic hot-reload when files change.
 
 **Try it immediately with the included sample resumes:**
 
