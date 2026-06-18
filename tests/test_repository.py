@@ -1077,6 +1077,40 @@ class TestEducation(unittest.TestCase):
         self.repo.add_resume(_make_resume(education_entries=[_education(competencies=["Algorithms"])]))
         self.assertEqual(self.repo.search_education_by_competency("COBOL"), [])
 
+    def test_search_education_multi_token_and_in_degree(self):
+        self.repo.add_resume(_make_resume(education_entries=[_education(degree="MS Computer Science")]))
+        results = self.repo.search_education("Computer Science")
+        self.assertEqual(len(results), 1)
+
+    def test_search_education_multi_token_and_one_missing(self):
+        self.repo.add_resume(_make_resume(education_entries=[_education(institution="Portland State University")]))
+        # "Portland" is there but "Community" is not
+        results = self.repo.search_education("Portland Community")
+        self.assertEqual(results, [])
+
+    def test_search_education_multi_token_or(self):
+        self.repo.add_resume(_make_resume(education_entries=[_education(institution="Portland State University")]))
+        results = self.repo.search_education("Portland Community", mode="or")
+        self.assertEqual(len(results), 1)
+
+    def test_search_education_by_competency_multi_token_and_full_phrase(self):
+        self.repo.add_resume(_make_resume(education_entries=[_education(competencies=["Machine Learning", "Databases"])]))
+        results = self.repo.search_education_by_competency("Machine Learning")
+        self.assertEqual(len(results), 1)
+        self.assertIn("Machine Learning", results[0]["matched_competencies"])
+
+    def test_search_education_by_competency_multi_token_and_no_partial(self):
+        # "Machine" and "Learning" are separate competencies — AND requires both in same title
+        self.repo.add_resume(_make_resume(education_entries=[_education(competencies=["Machine", "Learning"])]))
+        results = self.repo.search_education_by_competency("Machine Learning", mode="and")
+        self.assertEqual(results, [])
+
+    def test_search_education_by_competency_multi_token_or(self):
+        self.repo.add_resume(_make_resume(education_entries=[_education(competencies=["Machine", "Databases"])]))
+        results = self.repo.search_education_by_competency("Machine Learning", mode="or")
+        self.assertEqual(len(results), 1)
+        self.assertIn("Machine", results[0]["matched_competencies"])
+
 
 # ── clear ─────────────────────────────────────────────────────────────────────
 
