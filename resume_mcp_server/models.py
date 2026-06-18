@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any
 from uuid import uuid4
 from datetime import datetime, timezone
 from pydantic import BaseModel, Field
@@ -172,3 +173,27 @@ class ResumeResponse(BaseModel):
     badge_skills: list[BadgeSkillResponse]
     side_projects: list[SideProjectResponse]
     education_entries: list[EducationResponse]
+
+
+# ── Analytics / aggregation response schemas ─────────────────────────────────
+
+class CollectionStatsResponse(BaseModel):
+    total_resumes: int
+    total_work_experiences: int
+    total_unique_skills: int
+    total_side_projects: int
+    total_education_entries: int
+    total_achievements: int
+    avg_skills_per_resume: float
+    avg_work_experiences_per_resume: float
+
+
+class SkillFrequencyItem(BaseModel):
+    skill_id: ID
+    skill_title: str
+    resume_count: int
+
+
+class PaginatedResponse(BaseModel):
+    total_count: int
+    items: list[Any]

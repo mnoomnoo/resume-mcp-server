@@ -111,12 +111,17 @@ def _get_repo() -> ResumeRepository:
 
 
 @mcp.tool()
-def list_resume_summaries() -> list[dict[str, Any]]:
+def list_resume_summaries(limit: int = 100, offset: int = 0) -> dict[str, Any]:
     """List all resumes as lightweight identity records — id, name, email, phone only.
     Use this to orient and pick a resume_id before fetching details with other tools.
     Much more token-efficient than list_resumes when you only need to identify who is present.
+    Response includes total_count and items for pagination.
+
+    Args:
+        limit: Maximum number of results to return (default 100)
+        offset: Number of results to skip for pagination (default 0)
     """
-    return _get_repo().list_resume_summaries()
+    return _get_repo().list_resume_summaries(limit=limit, offset=offset).model_dump()
 
 
 @mcp.tool()
@@ -134,20 +139,23 @@ def get_resume_profile(resume_id: str) -> dict[str, Any] | str:
 
 
 @mcp.tool()
-def list_resumes(doc_type: str | None = None) -> list[dict[str, Any]]:
+def list_resumes(doc_type: str | None = None, limit: int = 100, offset: int = 0) -> dict[str, Any]:
     """List all documents. When doc_type is 'resume' (or omitted), structured resume data
     is returned if available; otherwise flat file metadata is returned.
+    Response includes total_count and items for pagination.
 
     Args:
         doc_type: Optional filter — one of: resume, cover_letter, application_material, other
+        limit: Maximum number of results to return (default 100)
+        offset: Number of results to skip for pagination (default 0)
     """
     if doc_type is None or doc_type == "resume":
-        structured = _get_repo().list_resumes()
-        if structured:
-            return [r.model_dump() for r in structured]
+        paginated = _get_repo().list_resumes(limit=limit, offset=offset)
+        if paginated.total_count > 0:
+            return paginated.model_dump()
 
-    results = _get_collection().list_all(doc_type=doc_type)
-    return [
+    all_meta = _get_collection().list_all(doc_type=doc_type)
+    all_items = [
         {
             "path": m.path,
             "filename": m.filename,
@@ -155,8 +163,9 @@ def list_resumes(doc_type: str | None = None) -> list[dict[str, Any]]:
             "modified": m.modified,
             "size_bytes": m.size_bytes,
         }
-        for m in results
+        for m in all_meta
     ]
+    return {"total_count": len(all_items), "items": all_items[offset:offset + limit]}
 
 
 @mcp.tool()
@@ -261,15 +270,17 @@ def search_resumes_by_skill(skill: str, mode: str = "and") -> list[dict[str, Any
 
 
 @mcp.tool()
-def list_work_experiences(resume_id: str | None = None, current_only: bool = False) -> list[dict[str, Any]]:
+def list_work_experiences(resume_id: str | None = None, current_only: bool = False, limit: int = 100, offset: int = 0) -> dict[str, Any]:
     """List work experiences, optionally filtered to a specific resume and/or only current roles.
+    Response includes total_count and items for pagination.
 
     Args:
         resume_id: Optional resume ID from list_resume_summaries to filter results
         current_only: If True, return only roles where end_date is 'Present'
+        limit: Maximum number of results to return (default 100)
+        offset: Number of results to skip for pagination (default 0)
     """
-    results = _get_repo().list_work_experiences(resume_id=resume_id, current_only=current_only)
-    return [r.model_dump() for r in results]
+    return _get_repo().list_work_experiences(resume_id=resume_id, current_only=current_only, limit=limit, offset=offset).model_dump()
 
 
 @mcp.tool()
@@ -286,14 +297,16 @@ def get_work_experience(id: str) -> dict[str, Any] | str:
 
 
 @mcp.tool()
-def list_achievements(resume_id: str | None = None) -> list[dict[str, Any]]:
+def list_achievements(resume_id: str | None = None, limit: int = 100, offset: int = 0) -> dict[str, Any]:
     """List all achievements (phrase skills), optionally filtered to a specific resume.
+    Response includes total_count and items for pagination.
 
     Args:
         resume_id: Optional resume ID from list_resumes to filter results
+        limit: Maximum number of results to return (default 100)
+        offset: Number of results to skip for pagination (default 0)
     """
-    results = _get_repo().list_achievements(resume_id=resume_id)
-    return [r.model_dump() for r in results]
+    return _get_repo().list_achievements(resume_id=resume_id, limit=limit, offset=offset).model_dump()
 
 
 @mcp.tool()
@@ -310,14 +323,16 @@ def get_achievement(id: str) -> dict[str, Any] | str:
 
 
 @mcp.tool()
-def list_badge_skills(resume_id: str | None = None) -> list[dict[str, Any]]:
+def list_badge_skills(resume_id: str | None = None, limit: int = 100, offset: int = 0) -> dict[str, Any]:
     """List all badge skills (technologies, tools, languages), optionally filtered to a resume.
+    Response includes total_count and items for pagination.
 
     Args:
         resume_id: Optional resume ID from list_resumes to filter results
+        limit: Maximum number of results to return (default 100)
+        offset: Number of results to skip for pagination (default 0)
     """
-    results = _get_repo().list_badge_skills(resume_id=resume_id)
-    return [r.model_dump() for r in results]
+    return _get_repo().list_badge_skills(resume_id=resume_id, limit=limit, offset=offset).model_dump()
 
 
 @mcp.tool()
@@ -334,15 +349,17 @@ def get_badge_skill(id: str) -> dict[str, Any] | str:
 
 
 @mcp.tool()
-def list_side_projects(resume_id: str | None = None) -> list[dict[str, Any]]:
+def list_side_projects(resume_id: str | None = None, limit: int = 100, offset: int = 0) -> dict[str, Any]:
     """List side projects (personal/portfolio projects, distinct from work experience)
     that demonstrate competency with specific technologies, optionally filtered to a resume.
+    Response includes total_count and items for pagination.
 
     Args:
         resume_id: Optional resume ID from list_resume_summaries to filter results
+        limit: Maximum number of results to return (default 100)
+        offset: Number of results to skip for pagination (default 0)
     """
-    results = _get_repo().list_side_projects(resume_id=resume_id)
-    return [r.model_dump() for r in results]
+    return _get_repo().list_side_projects(resume_id=resume_id, limit=limit, offset=offset).model_dump()
 
 
 @mcp.tool()
@@ -386,15 +403,17 @@ def search_side_projects_by_technology(technology: str, mode: str = "and") -> li
 
 
 @mcp.tool()
-def list_education(resume_id: str | None = None) -> list[dict[str, Any]]:
+def list_education(resume_id: str | None = None, limit: int = 100, offset: int = 0) -> dict[str, Any]:
     """List education entries (degree, institution, year, and relevant coursework/competencies),
     optionally filtered to a resume.
+    Response includes total_count and items for pagination.
 
     Args:
         resume_id: Optional resume ID from list_resume_summaries to filter results
+        limit: Maximum number of results to return (default 100)
+        offset: Number of results to skip for pagination (default 0)
     """
-    results = _get_repo().list_education(resume_id=resume_id)
-    return [r.model_dump() for r in results]
+    return _get_repo().list_education(resume_id=resume_id, limit=limit, offset=offset).model_dump()
 
 
 @mcp.tool()
@@ -436,6 +455,43 @@ def search_education_by_competency(competency: str, mode: str = "and") -> list[d
         mode: Token match mode — 'and' (default) requires all words to appear in the competency name; 'or' requires any word to match
     """
     return _get_repo().search_education_by_competency(competency, mode)
+
+
+@mcp.tool()
+def get_collection_stats() -> dict[str, Any]:
+    """Return aggregate counts and averages across the entire loaded resume collection.
+
+    Returns total_resumes, total_work_experiences, total_unique_skills, total_side_projects,
+    total_education_entries, total_achievements, avg_skills_per_resume,
+    avg_work_experiences_per_resume.
+    """
+    return _get_repo().get_collection_stats().model_dump()
+
+
+@mcp.tool()
+def get_skill_frequency(limit: int = 20) -> list[dict[str, Any]]:
+    """Return badge skills ranked by how many resumes list them, in descending order.
+
+    Useful for identifying the most common technologies across all candidates.
+
+    Args:
+        limit: Maximum number of skills to return (default 20)
+    """
+    return [item.model_dump() for item in _get_repo().get_skill_frequency(limit)]
+
+
+@mcp.tool()
+def search_resumes_by_skills(skills: list[str], mode: str = "and") -> list[dict[str, Any]]:
+    """Find resumes that have specific skills, using the same partial token matching as search_resumes_by_skill.
+
+    Each result includes: id, first_name, last_name, matched_skills.
+
+    Args:
+        skills: List of skill title fragments to filter by, e.g. ["Python", "Docker"]
+        mode: 'and' (default) — resume must have at least one matching skill for EACH query;
+              'or' — resume must have a matching skill for ANY query
+    """
+    return _get_repo().search_resumes_by_skills(skills, mode)
 
 
 def main() -> None:
