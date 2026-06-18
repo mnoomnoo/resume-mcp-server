@@ -11,13 +11,13 @@ An MCP server that gives Claude (or any MCP client) structured, searchable acces
 
 Job seekers accumulate document sprawl fast: multiple resume versions tailored to different roles, cover letter drafts, reference sheets. Manually digging through them to draft a new application is tedious. Point this server at your resume folder and Claude can answer questions like *"which of my resumes highlights Kubernetes experience?"*, *"what achievements have I listed across my backend roles?"*, or *"draft a cover letter drawing from my work at Acme Corp"* — without you pasting anything.
 
-The server parses each document into structured data (contact info, work history, education, skills, side projects) and exposes 24 tools covering full-text search, skill lookup, company and role queries, achievement mining, education search, and more. Files are watched and re-indexed automatically, so edits to your documents are reflected immediately.
+The server parses each document into structured data (contact info, work history, education, skills, side projects) and exposes 27 tools covering full-text search, skill lookup, company and role queries, achievement mining, education search, collection analytics, and more. Files are watched and re-indexed automatically, so edits to your documents are reflected immediately.
 
 ---
 
 ## Quick Start
 
-Give Claude structured access to your resume collection. The server parses your documents on startup and exposes 24 tools for searching by name, company, skill, education, side project, or full text — with automatic hot-reload when files change.
+Give Claude structured access to your resume collection. The server parses your documents on startup and exposes 27 tools for searching by name, company, skill, education, side project, or full text, plus analytics tools for skill frequency and collection statistics — with automatic hot-reload when files change.
 
 **Try it immediately with the included sample resumes:**
 
@@ -270,15 +270,30 @@ All `search_*` tools split the query on whitespace and support two token match m
 
 ---
 
+## Pagination
+
+All `list_*` tools accept `limit` (default `100`) and `offset` (default `0`) parameters and return a consistent envelope:
+
+```json
+{"total_count": 247, "items": [...]}
+```
+
+`total_count` is the full collection size before slicing. To check whether more pages exist: `offset + len(items) < total_count`.
+
+---
+
 ## MCP Tools
 
 ### `list_resume_summaries`
 
 List all resumes as lightweight identity records. Use this first to orient and pick a `resume_id` before fetching details — much more token-efficient than `list_resumes`.
 
-No parameters.
+| Parameter | Type | Description |
+|---|---|---|
+| `limit` | integer (optional) | Maximum number of results (default `100`) |
+| `offset` | integer (optional) | Number of results to skip (default `0`) |
 
-Returns: `id`, `first_name`, `last_name`, `email`, `phone_num` for each resume.
+Returns: paginated envelope — `total_count` + `items`, where each item has `id`, `first_name`, `last_name`, `email`, `phone_num`.
 
 ---
 
@@ -289,6 +304,10 @@ List all documents, optionally filtered by type.
 | Parameter | Type | Description |
 |---|---|---|
 | `doc_type` | string (optional) | `resume`, `cover_letter`, `application_material`, or `other` |
+| `limit` | integer (optional) | Maximum number of results (default `100`) |
+| `offset` | integer (optional) | Number of results to skip (default `0`) |
+
+Returns: paginated envelope — `total_count` + `items`.
 
 ---
 
@@ -380,6 +399,10 @@ List work experience entries, optionally scoped to a single resume and/or only c
 |---|---|---|
 | `resume_id` | string (optional) | Resume ID from `list_resume_summaries` |
 | `current_only` | boolean (optional) | If `true`, return only roles where `end_date` is `"Present"` |
+| `limit` | integer (optional) | Maximum number of results (default `100`) |
+| `offset` | integer (optional) | Number of results to skip (default `0`) |
+
+Returns: paginated envelope — `total_count` + `items`.
 
 ---
 
@@ -400,6 +423,10 @@ List all achievement bullets, optionally scoped to a single resume.
 | Parameter | Type | Description |
 |---|---|---|
 | `resume_id` | string (optional) | Resume ID from `list_resumes` |
+| `limit` | integer (optional) | Maximum number of results (default `100`) |
+| `offset` | integer (optional) | Number of results to skip (default `0`) |
+
+Returns: paginated envelope — `total_count` + `items`.
 
 ---
 
@@ -434,6 +461,10 @@ List all badge skills, optionally scoped to a single resume.
 | Parameter | Type | Description |
 |---|---|---|
 | `resume_id` | string (optional) | Resume ID from `list_resumes` |
+| `limit` | integer (optional) | Maximum number of results (default `100`) |
+| `offset` | integer (optional) | Number of results to skip (default `0`) |
+
+Returns: paginated envelope — `total_count` + `items`.
 
 ---
 
@@ -454,6 +485,10 @@ List side projects (personal/portfolio projects, distinct from work experience) 
 | Parameter | Type | Description |
 |---|---|---|
 | `resume_id` | string (optional) | Resume ID from `list_resume_summaries` |
+| `limit` | integer (optional) | Maximum number of results (default `100`) |
+| `offset` | integer (optional) | Number of results to skip (default `0`) |
+
+Returns: paginated envelope — `total_count` + `items`.
 
 ---
 
@@ -500,6 +535,10 @@ List education entries (degree, institution, year, and relevant coursework/compe
 | Parameter | Type | Description |
 |---|---|---|
 | `resume_id` | string (optional) | Resume ID from `list_resume_summaries` |
+| `limit` | integer (optional) | Maximum number of results (default `100`) |
+| `offset` | integer (optional) | Number of results to skip (default `0`) |
+
+Returns: paginated envelope — `total_count` + `items`.
 
 ---
 
@@ -535,3 +574,38 @@ Returns: `id`, `institution`, `degree`, `year`, `matched_competencies`, `resume_
 |---|---|---|
 | `competency` | string | Skill/competency name fragment to search for (case-insensitive, partial match) |
 | `mode` | string (optional) | `"and"` *(default)* or `"or"` — see [Search behavior](#search-behavior) |
+
+---
+
+### `get_collection_stats`
+
+Return aggregate counts and averages across the entire loaded resume collection. Useful for a quick overview before diving into individual records.
+
+No parameters.
+
+Returns: `total_resumes`, `total_work_experiences`, `total_unique_skills`, `total_side_projects`, `total_education_entries`, `total_achievements`, `avg_skills_per_resume`, `avg_work_experiences_per_resume`.
+
+---
+
+### `get_skill_frequency`
+
+Return badge skills ranked by how many resumes list them, in descending order. Useful for identifying the most common technologies across all candidates.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `limit` | integer (optional) | Maximum number of skills to return (default `20`) |
+
+Returns: list of `{ skill_id, skill_title, resume_count }`.
+
+---
+
+### `search_resumes_by_skills`
+
+Find resumes that have specific skills. Uses the same partial token matching as `search_resumes_by_skill`, but accepts a list and applies AND/OR logic *across* the skill queries — e.g. find everyone with both Python and Docker.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `skills` | list of strings | Skill title fragments to filter by, e.g. `["Python", "Docker"]` |
+| `mode` | string (optional) | `"and"` *(default)* — resume must have a match for **every** query; `"or"` — resume must have a match for **any** query |
+
+Returns: `id`, `first_name`, `last_name`, `matched_skills`.
