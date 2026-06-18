@@ -253,6 +253,21 @@ Types are inferred from filenames:
 
 ---
 
+## Search behavior
+
+All `search_*` tools split the query on whitespace and support two token match modes via the optional `mode` parameter:
+
+| `mode` | Behavior |
+|---|---|
+| `"and"` *(default)* | All tokens must appear within the same field. `"latency throughput"` only matches a description that contains both words. |
+| `"or"` | Any token is sufficient. `"latency throughput"` matches a description that contains either word. |
+
+**Multi-field note:** For tools that search several fields (company name, position title, achievement text, etc.), AND mode requires all tokens to co-occur in the *same* field, not spread across fields. Use OR mode when you want a looser cross-field match.
+
+**Single-word queries** behave identically in both modes.
+
+---
+
 ## MCP Tools
 
 ### `list_resume_summaries`
@@ -313,6 +328,7 @@ Find resumes by person name (first or last name). Returns minimal identity field
 | Parameter | Type | Description |
 |---|---|---|
 | `query` | string | Name fragment to search for (case-insensitive, partial match) |
+| `mode` | string (optional) | `"and"` *(default)* or `"or"` — see [Search behavior](#search-behavior) |
 
 Returns: `id`, `first_name`, `last_name`, `email`, `phone_num`.
 
@@ -325,6 +341,7 @@ Find which resumes list a given badge skill. Returns resume identity and matched
 | Parameter | Type | Description |
 |---|---|---|
 | `skill` | string | Skill title fragment to search for (case-insensitive, partial match) |
+| `mode` | string (optional) | `"and"` *(default)* or `"or"` — see [Search behavior](#search-behavior) |
 
 Returns: `id`, `first_name`, `last_name`, `matched_skills`.
 
@@ -337,6 +354,7 @@ Search badge skills (technologies, tools, languages) by title.
 | Parameter | Type | Description |
 |---|---|---|
 | `query` | string | Text to search for in skill titles (case-insensitive) |
+| `mode` | string (optional) | `"and"` *(default)* or `"or"` — see [Search behavior](#search-behavior) |
 
 ---
 
@@ -348,6 +366,7 @@ Each result includes a `resume_id` field identifying which resume the entry belo
 | Parameter | Type | Description |
 |---|---|---|
 | `query` | string | Text to search for (case-insensitive) |
+| `mode` | string (optional) | `"and"` *(default)* or `"or"` — see [Search behavior](#search-behavior) |
 
 ---
 
@@ -400,6 +419,7 @@ Search achievement descriptions directly, returning only matching bullets with m
 |---|---|---|
 | `query` | string | Text to search for in achievement descriptions (case-insensitive) |
 | `resume_id` | string (optional) | Resume ID to scope the search to one resume |
+| `mode` | string (optional) | `"and"` *(default)* or `"or"` — see [Search behavior](#search-behavior) |
 
 Returns: `id`, `desc`, `company_name`, `position_title`, `work_experience_id`, `resume_id`.
 
@@ -454,6 +474,7 @@ Each result includes a `resume_id` field identifying which resume the project be
 |---|---|---|
 | `query` | string | Text to search for (case-insensitive) |
 | `resume_id` | string (optional) | Resume ID to scope the search to one resume |
+| `mode` | string (optional) | `"and"` *(default)* or `"or"` — see [Search behavior](#search-behavior) |
 
 ---
 
@@ -464,6 +485,7 @@ Find side projects that demonstrate competency with a given technology.
 | Parameter | Type | Description |
 |---|---|---|
 | `technology` | string | Technology/skill name fragment to search for (case-insensitive, partial match) |
+| `mode` | string (optional) | `"and"` *(default)* or `"or"` — see [Search behavior](#search-behavior) |
 
 Returns: `id`, `name`, `description`, `matched_technologies`, `resume_id`.
 
@@ -497,6 +519,7 @@ Search education entries by institution, degree, or competency. Each result incl
 |---|---|---|
 | `query` | string | Text to search for (case-insensitive) |
 | `resume_id` | string (optional) | Resume ID to scope the search to one resume |
+| `mode` | string (optional) | `"and"` *(default)* or `"or"` — see [Search behavior](#search-behavior) |
 
 ---
 
@@ -509,3 +532,4 @@ Returns: `id`, `institution`, `degree`, `year`, `matched_competencies`, `resume_
 | Parameter | Type | Description |
 |---|---|---|
 | `competency` | string | Skill/competency name fragment to search for (case-insensitive, partial match) |
+| `mode` | string (optional) | `"and"` *(default)* or `"or"` — see [Search behavior](#search-behavior) |
