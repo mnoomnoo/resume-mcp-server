@@ -120,64 +120,64 @@ class TestIntegration(unittest.TestCase):
     # ── List tools (repo) ─────────────────────────────────────────────────────
 
     def test_list_work_experiences_all(self):
-        wes = self.repo.list_work_experiences()
-        self.assertGreaterEqual(len(wes), 4)  # 2 jobs per resume
-        companies = {w.company_name for w in wes}
+        result = self.repo.list_work_experiences()
+        self.assertGreaterEqual(result.total_count, 4)  # 2 jobs per resume
+        companies = {w["company_name"] for w in result.items}
         self.assertIn("Acme Corp", companies)
         self.assertIn("CloudCo", companies)
 
     def test_list_work_experiences_current_only(self):
-        current = self.repo.list_work_experiences(current_only=True)
-        self.assertGreaterEqual(len(current), 2)
+        result = self.repo.list_work_experiences(current_only=True)
+        self.assertGreaterEqual(result.total_count, 2)
         self.assertTrue(all(
-            "present" in w.end_date.lower() for w in current
+            "present" in w["end_date"].lower() for w in result.items
         ))
 
     def test_list_work_experiences_filtered_by_resume(self):
         summaries = self.repo.list_resume_summaries()
-        jane = next(s for s in summaries if s["first_name"] == "Jane")
-        wes = self.repo.list_work_experiences(resume_id=jane["id"])
-        companies = {w.company_name for w in wes}
+        jane = next(s for s in summaries.items if s["first_name"] == "Jane")
+        result = self.repo.list_work_experiences(resume_id=jane["id"])
+        companies = {w["company_name"] for w in result.items}
         self.assertIn("Acme Corp", companies)
         self.assertIn("Widgets Inc", companies)
         self.assertNotIn("CloudCo", companies)
 
     def test_list_achievements_all(self):
-        achs = self.repo.list_achievements()
-        self.assertGreater(len(achs), 0)
+        result = self.repo.list_achievements()
+        self.assertGreater(result.total_count, 0)
 
     def test_list_achievements_filtered_by_resume(self):
         summaries = self.repo.list_resume_summaries()
-        john = next(s for s in summaries if s["first_name"] == "John")
-        achs = self.repo.list_achievements(resume_id=john["id"])
-        self.assertGreater(len(achs), 0)
+        john = next(s for s in summaries.items if s["first_name"] == "John")
+        john_achs = self.repo.list_achievements(resume_id=john["id"])
+        self.assertGreater(john_achs.total_count, 0)
         # Jane's achievements should not appear
-        jane_id = next(s["id"] for s in summaries if s["first_name"] == "Jane")
+        jane_id = next(s["id"] for s in summaries.items if s["first_name"] == "Jane")
         jane_achs = self.repo.list_achievements(resume_id=jane_id)
-        jane_descs = {a.desc for a in jane_achs}
-        john_descs = {a.desc for a in achs}
+        jane_descs = {a["desc"] for a in jane_achs.items}
+        john_descs = {a["desc"] for a in john_achs.items}
         self.assertEqual(jane_descs & john_descs, set())
 
     def test_list_badge_skills_all(self):
-        skills = self.repo.list_badge_skills()
-        titles = {s.title for s in skills}
+        result = self.repo.list_badge_skills()
+        titles = {s["title"] for s in result.items}
         self.assertIn("Python", titles)
         self.assertIn("Docker", titles)
 
     def test_list_badge_skills_filtered_by_resume(self):
         summaries = self.repo.list_resume_summaries()
-        jane = next(s for s in summaries if s["first_name"] == "Jane")
-        skills = self.repo.list_badge_skills(resume_id=jane["id"])
-        titles = {s.title for s in skills}
+        jane = next(s for s in summaries.items if s["first_name"] == "Jane")
+        result = self.repo.list_badge_skills(resume_id=jane["id"])
+        titles = {s["title"] for s in result.items}
         self.assertIn("Go", titles)
         self.assertNotIn("Terraform", titles)  # John's skill
 
     def test_list_resume_summaries(self):
-        summaries = self.repo.list_resume_summaries()
-        self.assertEqual(len(summaries), 2)
-        names = {s["first_name"] for s in summaries}
+        result = self.repo.list_resume_summaries()
+        self.assertEqual(result.total_count, 2)
+        names = {s["first_name"] for s in result.items}
         self.assertEqual(names, {"Jane", "John"})
-        for s in summaries:
+        for s in result.items:
             self.assertIn("id", s)
             self.assertIn("email", s)
             self.assertNotIn("work_experiences", s)
@@ -185,35 +185,38 @@ class TestIntegration(unittest.TestCase):
     # ── Get tools (repo) ──────────────────────────────────────────────────────
 
     def test_get_work_experience_by_id(self):
-        wes = self.repo.list_work_experiences()
-        we = self.repo.find_work_experience(wes[0].id)
+        result = self.repo.list_work_experiences()
+        we_id = result.items[0]["id"]
+        we = self.repo.find_work_experience(we_id)
         self.assertIsNotNone(we)
-        self.assertEqual(we.id, wes[0].id)
+        self.assertEqual(we.id, we_id)
 
     def test_get_work_experience_unknown_returns_none(self):
         self.assertIsNone(self.repo.find_work_experience("bad-id"))
 
     def test_get_achievement_by_id(self):
-        achs = self.repo.list_achievements()
-        ach = self.repo.find_achievement(achs[0].id)
+        result = self.repo.list_achievements()
+        ach_id = result.items[0]["id"]
+        ach = self.repo.find_achievement(ach_id)
         self.assertIsNotNone(ach)
-        self.assertEqual(ach.id, achs[0].id)
+        self.assertEqual(ach.id, ach_id)
 
     def test_get_achievement_unknown_returns_none(self):
         self.assertIsNone(self.repo.find_achievement("bad-id"))
 
     def test_get_badge_skill_by_id(self):
-        skills = self.repo.list_badge_skills()
-        skill = self.repo.find_badge_skill(skills[0].id)
+        result = self.repo.list_badge_skills()
+        skill_id = result.items[0]["id"]
+        skill = self.repo.find_badge_skill(skill_id)
         self.assertIsNotNone(skill)
-        self.assertEqual(skill.id, skills[0].id)
+        self.assertEqual(skill.id, skill_id)
 
     def test_get_badge_skill_unknown_returns_none(self):
         self.assertIsNone(self.repo.find_badge_skill("bad-id"))
 
     def test_get_resume_profile(self):
-        summaries = self.repo.list_resume_summaries()
-        for s in summaries:
+        result = self.repo.list_resume_summaries()
+        for s in result.items:
             profile = self.repo.get_resume_profile(s["id"])
             self.assertIsNotNone(profile)
             self.assertEqual(profile["id"], s["id"])
@@ -295,7 +298,7 @@ class TestIntegration(unittest.TestCase):
 
     def test_search_achievements_scoped_by_resume_id(self):
         summaries = self.repo.list_resume_summaries()
-        jane_id = next(s["id"] for s in summaries if s["first_name"] == "Jane")
+        jane_id = next(s["id"] for s in summaries.items if s["first_name"] == "Jane")
         results = self.repo.search_achievements("engineers", resume_id=jane_id)
         self.assertTrue(all(r["resume_id"] == jane_id for r in results))
 

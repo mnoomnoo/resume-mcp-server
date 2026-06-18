@@ -182,26 +182,26 @@ class TestCollectionLoadSampleDir(unittest.TestCase):
 
     def test_repo_populated_with_resumes(self):
         # Markdown headers cause partial parsing; at minimum emails are extracted
-        summaries = self.collection._repo.list_resume_summaries()
-        self.assertGreaterEqual(len(summaries), 2)
-        emails = {s["email"] for s in summaries}
+        result = self.collection._repo.list_resume_summaries()
+        self.assertGreaterEqual(result.total_count, 2)
+        emails = {s["email"] for s in result.items}
         self.assertIn("jane.doe@email.com", emails)
         self.assertIn("john.smith@email.com", emails)
 
     def test_markdown_files_parse_work_experience(self):
-        wes = self.collection._repo.list_work_experiences()
-        self.assertGreater(len(wes), 0)
-        companies = {w.company_name for w in wes}
+        result = self.collection._repo.list_work_experiences()
+        self.assertGreater(result.total_count, 0)
+        companies = {w["company_name"] for w in result.items}
         self.assertIn("Acme Corp", companies)
 
     def test_markdown_files_parse_skills(self):
-        skills = self.collection._repo.list_badge_skills()
-        titles = {s.title for s in skills}
+        result = self.collection._repo.list_badge_skills()
+        titles = {s["title"] for s in result.items}
         self.assertIn("Python", titles)
 
     def test_markdown_files_parse_last_name(self):
-        summaries = self.collection._repo.list_resume_summaries()
-        last_names = {s["last_name"] for s in summaries}
+        result = self.collection._repo.list_resume_summaries()
+        last_names = {s["last_name"] for s in result.items}
         self.assertIn("Doe", last_names)
 
 
@@ -237,21 +237,21 @@ class TestCollectionLoadPlainText(unittest.TestCase):
         self.assertEqual(cover_letters[0].filename, "cover_letter.txt")
 
     def test_repo_has_structured_data(self):
-        summaries = self.collection._repo.list_resume_summaries()
-        self.assertEqual(len(summaries), 2)
-        names = {s["first_name"] for s in summaries}
+        result = self.collection._repo.list_resume_summaries()
+        self.assertEqual(result.total_count, 2)
+        names = {s["first_name"] for s in result.items}
         self.assertIn("Jane", names)
         self.assertIn("John", names)
 
     def test_repo_work_experiences_parsed(self):
-        wes = self.collection._repo.list_work_experiences()
-        self.assertGreater(len(wes), 0)
-        companies = {w.company_name for w in wes}
+        result = self.collection._repo.list_work_experiences()
+        self.assertGreater(result.total_count, 0)
+        companies = {w["company_name"] for w in result.items}
         self.assertIn("Acme Corp", companies)
 
     def test_repo_skills_parsed(self):
-        skills = self.collection._repo.list_badge_skills()
-        titles = {s.title for s in skills}
+        result = self.collection._repo.list_badge_skills()
+        titles = {s["title"] for s in result.items}
         self.assertIn("Python", titles)
 
     def test_search_text_across_cover_letter(self):
@@ -269,7 +269,7 @@ class TestCollectionLoadPlainText(unittest.TestCase):
 
     def test_non_resume_files_not_parsed_into_repo(self):
         # cover_letter.txt should appear in the index but NOT be added to repo
-        count = len(self.collection._repo.list_resumes())
+        count = self.collection._repo.list_resumes().total_count
         self.assertEqual(count, 2)
 
 
