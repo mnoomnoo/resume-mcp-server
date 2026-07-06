@@ -29,7 +29,7 @@ RESUME_DIR=./sample_resumes resume-mcp-server
 Then connect Claude Code:
 
 ```bash
-claude mcp add resume-collection resume-mcp-server -e RESUME_DIR=$(pwd)/sample_resumes
+claude mcp add resume-mcp-server resume-mcp-server -e RESUME_DIR=$(pwd)/sample_resumes
 ```
 
 For a persistent setup with Docker or your own documents, see [Docker Deploy](#docker-deploy) or [Dev Environment](#dev-environment).
@@ -73,7 +73,7 @@ The server is now available at `http://localhost:8001/mcp`.
 ```json
 {
   "mcpServers": {
-    "resume-collection": {
+    "resume-mcp-server": {
       "type": "http",
       "url": "http://localhost:8001/mcp"
     }
@@ -86,7 +86,7 @@ The server is now available at `http://localhost:8001/mcp`.
 ```json
 {
   "servers": {
-    "resume-collection": {
+    "resume-mcp-server": {
       "type": "http",
       "url": "http://localhost:8001/mcp"
     }
@@ -97,7 +97,7 @@ The server is now available at `http://localhost:8001/mcp`.
 **Claude Code**:
 
 ```bash
-claude mcp add resume-collection --transport http http://localhost:8001/mcp
+claude mcp add resume-mcp-server --transport http http://localhost:8001/mcp
 ```
 
 To add it globally across all projects, add the following to `~/.claude.json` instead:
@@ -105,7 +105,7 @@ To add it globally across all projects, add the following to `~/.claude.json` in
 ```json
 {
   "mcpServers": {
-    "resume-collection": {
+    "resume-mcp-server": {
       "type": "http",
       "url": "http://localhost:8001/mcp"
     }
@@ -132,7 +132,7 @@ docker run -i --rm -v /path/to/your/resumes:/resumes resume-mcp-server
 ```json
 {
   "mcpServers": {
-    "resume-collection": {
+    "resume-mcp-server": {
       "command": "docker",
       "args": ["run", "-i", "--rm", "-v", "/path/to/your/resumes:/resumes", "resume-mcp-server"]
     }
@@ -183,7 +183,7 @@ Then just run `resume-mcp-server` — the `.env` is loaded automatically. Variab
 ```json
 {
   "mcpServers": {
-    "resume-collection": {
+    "resume-mcp-server": {
       "command": "resume-mcp-server",
       "env": {
         "RESUME_DIR": "/path/to/your/resumes"
@@ -198,7 +198,7 @@ If `resume-mcp-server` is not on your `PATH`, use the full path (e.g. `~/.venv/b
 **Claude Code**:
 
 ```bash
-claude mcp add resume-collection resume-mcp-server -e RESUME_DIR=/path/to/your/resumes
+claude mcp add resume-mcp-server resume-mcp-server -e RESUME_DIR=/path/to/your/resumes
 ```
 
 **uvx:**
@@ -206,7 +206,7 @@ claude mcp add resume-collection resume-mcp-server -e RESUME_DIR=/path/to/your/r
 ```json
 {
   "mcpServers": {
-    "resume-collection": {
+    "resume-mcp-server": {
       "command": "uvx",
       "args": ["resume-mcp-server"],
       "env": {
