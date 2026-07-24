@@ -29,7 +29,6 @@ from resume_mcp_server.server import (
     search_resumes,
     search_resumes_by_name,
     search_resumes_by_skill,
-    search_resumes_by_skills,
     search_side_projects,
     search_side_projects_by_technology,
     search_skills,
@@ -178,8 +177,8 @@ class TestServerEmptyDir(unittest.TestCase):
 
     def test_get_resume_unknown_path_returns_error(self):
         result = get_resume("nonexistent.txt")
-        self.assertIsInstance(result, str)
-        self.assertIn("Error", result)
+        self.assertIsInstance(result, dict)
+        self.assertIn("error", result)
 
     def test_search_resumes_empty(self):
         self.assertEqual(search_resumes("python")["items"], [])
@@ -191,8 +190,8 @@ class TestServerEmptyDir(unittest.TestCase):
 
     def test_get_resume_profile_unknown_returns_error(self):
         result = get_resume_profile("nonexistent-id")
-        self.assertIsInstance(result, str)
-        self.assertIn("Error", result)
+        self.assertIsInstance(result, dict)
+        self.assertIn("error", result)
 
     def test_search_skills_empty(self):
         self.assertEqual(search_skills("python")["items"], [])
@@ -214,32 +213,32 @@ class TestServerEmptyDir(unittest.TestCase):
 
     def test_get_work_experience_unknown_returns_error(self):
         result = get_work_experience("nonexistent-id")
-        self.assertIsInstance(result, str)
-        self.assertIn("Error", result)
+        self.assertIsInstance(result, dict)
+        self.assertIn("error", result)
 
     def test_list_achievements_empty(self):
         self.assertEqual(list_achievements()["items"], [])
 
     def test_get_achievement_unknown_returns_error(self):
         result = get_achievement("nonexistent-id")
-        self.assertIsInstance(result, str)
-        self.assertIn("Error", result)
+        self.assertIsInstance(result, dict)
+        self.assertIn("error", result)
 
     def test_list_badge_skills_empty(self):
         self.assertEqual(list_badge_skills()["items"], [])
 
     def test_get_badge_skill_unknown_returns_error(self):
         result = get_badge_skill("nonexistent-id")
-        self.assertIsInstance(result, str)
-        self.assertIn("Error", result)
+        self.assertIsInstance(result, dict)
+        self.assertIn("error", result)
 
     def test_list_side_projects_empty(self):
         self.assertEqual(list_side_projects()["items"], [])
 
     def test_get_side_project_unknown_returns_error(self):
         result = get_side_project("nonexistent-id")
-        self.assertIsInstance(result, str)
-        self.assertIn("Error", result)
+        self.assertIsInstance(result, dict)
+        self.assertIn("error", result)
 
     def test_search_side_projects_empty(self):
         self.assertEqual(search_side_projects("python")["items"], [])
@@ -300,18 +299,18 @@ class TestGetResume(_ServerFixture):
 
     def test_known_path_returns_text(self):
         path = self._collection.list_all(doc_type="resume")[0].path
-        text = get_resume(path)
+        text = get_resume(path)["text"]
         self.assertIsInstance(text, str)
         self.assertGreater(len(text), 50)
 
-    def test_unknown_path_returns_error_string(self):
+    def test_unknown_path_returns_error(self):
         result = get_resume("does_not_exist.txt")
-        self.assertIsInstance(result, str)
-        self.assertIn("Error", result)
+        self.assertIsInstance(result, dict)
+        self.assertIn("error", result)
 
     def test_cover_letter_path_returns_text(self):
         path = self._collection.list_all(doc_type="cover_letter")[0].path
-        text = get_resume(path)
+        text = get_resume(path)["text"]
         self.assertIsInstance(text, str)
         self.assertIn("Hiring Manager", text)
 
@@ -403,11 +402,11 @@ class TestGetResumeProfile(_ServerFixture):
         self.assertNotIn("work_experiences", profile)
         self.assertNotIn("badge_skills", profile)
 
-    def test_unknown_id_returns_error_string(self):
+    def test_unknown_id_returns_error(self):
         result = get_resume_profile("no-such-id")
-        self.assertIsInstance(result, str)
-        self.assertIn("Error", result)
-        self.assertIn("no-such-id", result)
+        self.assertIsInstance(result, dict)
+        self.assertIn("error", result)
+        self.assertIn("no-such-id", result["error"])
 
 
 class TestListWorkExperiences(_ServerFixture):
@@ -437,8 +436,9 @@ class TestListWorkExperiences(_ServerFixture):
         self.assertIn("Acme Corp", companies)
         self.assertNotIn("CloudCo", companies)
 
-    def test_unknown_resume_id_returns_empty(self):
-        self.assertEqual(list_work_experiences(resume_id="bad-id")["items"], [])
+    def test_unknown_resume_id_returns_error(self):
+        result = list_work_experiences(resume_id="bad-id")
+        self.assertIn("error", result)
 
     def test_result_is_serialisable(self):
         import json
@@ -458,11 +458,11 @@ class TestGetWorkExperience(_ServerFixture):
         self.assertIn("achievements", result)
         self.assertIsInstance(result["achievements"], list)
 
-    def test_unknown_id_returns_error_string(self):
+    def test_unknown_id_returns_error(self):
         result = get_work_experience("no-such-id")
-        self.assertIsInstance(result, str)
-        self.assertIn("Error", result)
-        self.assertIn("no-such-id", result)
+        self.assertIsInstance(result, dict)
+        self.assertIn("error", result)
+        self.assertIn("no-such-id", result["error"])
 
 
 class TestListAchievements(_ServerFixture):
@@ -483,8 +483,9 @@ class TestListAchievements(_ServerFixture):
         john_achs = {a["desc"] for a in list_achievements(resume_id=john_id)["items"]}
         self.assertEqual(jane_achs & john_achs, set())
 
-    def test_unknown_resume_id_returns_empty(self):
-        self.assertEqual(list_achievements(resume_id="bad-id")["items"], [])
+    def test_unknown_resume_id_returns_error(self):
+        result = list_achievements(resume_id="bad-id")
+        self.assertIn("error", result)
 
     def test_result_is_serialisable(self):
         import json
@@ -505,11 +506,11 @@ class TestGetAchievement(_ServerFixture):
         self.assertIsInstance(result["desc"], str)
         self.assertGreater(len(result["desc"]), 0)
 
-    def test_unknown_id_returns_error_string(self):
+    def test_unknown_id_returns_error(self):
         result = get_achievement("no-such-id")
-        self.assertIsInstance(result, str)
-        self.assertIn("Error", result)
-        self.assertIn("no-such-id", result)
+        self.assertIsInstance(result, dict)
+        self.assertIn("error", result)
+        self.assertIn("no-such-id", result["error"])
 
 
 class TestListBadgeSkills(_ServerFixture):
@@ -530,8 +531,9 @@ class TestListBadgeSkills(_ServerFixture):
         self.assertIn("Go", titles)
         self.assertNotIn("Terraform", titles)
 
-    def test_unknown_resume_id_returns_empty(self):
-        self.assertEqual(list_badge_skills(resume_id="bad-id")["items"], [])
+    def test_unknown_resume_id_returns_error(self):
+        result = list_badge_skills(resume_id="bad-id")
+        self.assertIn("error", result)
 
     def test_result_is_serialisable(self):
         import json
@@ -551,11 +553,11 @@ class TestGetBadgeSkill(_ServerFixture):
         self.assertIn("title", result)
         self.assertIsInstance(result["title"], str)
 
-    def test_unknown_id_returns_error_string(self):
+    def test_unknown_id_returns_error(self):
         result = get_badge_skill("no-such-id")
-        self.assertIsInstance(result, str)
-        self.assertIn("Error", result)
-        self.assertIn("no-such-id", result)
+        self.assertIsInstance(result, dict)
+        self.assertIn("error", result)
+        self.assertIn("no-such-id", result["error"])
 
 
 class TestListSideProjects(_ServerFixture):
@@ -585,11 +587,11 @@ class TestGetSideProject(_ServerFixture):
         self.assertEqual(result["id"], project_id)
         self.assertIn("technologies", result)
 
-    def test_unknown_id_returns_error_string(self):
+    def test_unknown_id_returns_error(self):
         result = get_side_project("no-such-id")
-        self.assertIsInstance(result, str)
-        self.assertIn("Error", result)
-        self.assertIn("no-such-id", result)
+        self.assertIsInstance(result, dict)
+        self.assertIn("error", result)
+        self.assertIn("no-such-id", result["error"])
 
 
 class TestSearchSideProjects(_ServerFixture):
@@ -832,8 +834,9 @@ class TestListEducation(_ServerFixture):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["institution"], "University of Oregon")
 
-    def test_unknown_resume_id_returns_empty(self):
-        self.assertEqual(list_education(resume_id="bad-id")["items"], [])
+    def test_unknown_resume_id_returns_error(self):
+        result = list_education(resume_id="bad-id")
+        self.assertIn("error", result)
 
     def test_includes_competencies(self):
         jane_id = next(s["id"] for s in list_resume_summaries()["items"] if s["first_name"] == "Jane")
@@ -861,11 +864,11 @@ class TestGetEducation(_ServerFixture):
         self.assertIn("year", result)
         self.assertIn("competencies", result)
 
-    def test_unknown_id_returns_error_string(self):
+    def test_unknown_id_returns_error(self):
         result = get_education("no-such-id")
-        self.assertIsInstance(result, str)
-        self.assertIn("Error", result)
-        self.assertIn("no-such-id", result)
+        self.assertIsInstance(result, dict)
+        self.assertIn("error", result)
+        self.assertIn("no-such-id", result["error"])
 
 
 class TestSearchEducation(_ServerFixture):
@@ -996,55 +999,74 @@ class TestGetSkillFrequency(_ServerFixture):
         json.dumps(get_skill_frequency())
 
 
-class TestSearchResumesBySkills(_ServerFixture):
+class TestSearchResumesBySkillList(_ServerFixture):
+    """search_resumes_by_skill also accepts a list of skills (merged from the former
+    search_resumes_by_skills tool)."""
+
     def test_single_skill_matches_both(self):
-        results = search_resumes_by_skills(["Python"])["items"]
+        results = search_resumes_by_skill(["Python"])["items"]
         self.assertGreaterEqual(len(results), 2)
 
-    def test_single_skill_same_ids_as_search_resumes_by_skill(self):
+    def test_list_of_one_same_ids_as_string_form(self):
         single = {r["id"] for r in search_resumes_by_skill("Python")["items"]}
-        multi = {r["id"] for r in search_resumes_by_skills(["Python"])["items"]}
+        multi = {r["id"] for r in search_resumes_by_skill(["Python"])["items"]}
         self.assertEqual(single, multi)
 
     def test_and_mode_returns_subset(self):
-        python_only = {r["id"] for r in search_resumes_by_skills(["Python"])["items"]}
-        both = {r["id"] for r in search_resumes_by_skills(["Python", "Terraform"], mode="and")["items"]}
+        python_only = {r["id"] for r in search_resumes_by_skill(["Python"])["items"]}
+        both = {r["id"] for r in search_resumes_by_skill(["Python", "Terraform"], mode="and")["items"]}
         self.assertTrue(both.issubset(python_only))
 
     def test_and_mode_exclusive_skill_returns_one(self):
-        results = search_resumes_by_skills(["Python", "Terraform"], mode="and")["items"]
+        results = search_resumes_by_skill(["Python", "Terraform"], mode="and")["items"]
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["first_name"], "John")
 
     def test_or_mode_returns_superset_of_and(self):
-        and_ids = {r["id"] for r in search_resumes_by_skills(["Python", "Terraform"], mode="and")["items"]}
-        or_ids = {r["id"] for r in search_resumes_by_skills(["Python", "Terraform"], mode="or")["items"]}
+        and_ids = {r["id"] for r in search_resumes_by_skill(["Python", "Terraform"], mode="and")["items"]}
+        or_ids = {r["id"] for r in search_resumes_by_skill(["Python", "Terraform"], mode="or")["items"]}
         self.assertTrue(and_ids.issubset(or_ids))
 
     def test_unknown_skill_returns_empty(self):
-        self.assertEqual(search_resumes_by_skills(["COBOL"])["items"], [])
+        self.assertEqual(search_resumes_by_skill(["COBOL"])["items"], [])
 
     def test_and_with_one_unknown_returns_empty(self):
-        self.assertEqual(search_resumes_by_skills(["Python", "COBOL"], mode="and")["items"], [])
+        self.assertEqual(search_resumes_by_skill(["Python", "COBOL"], mode="and")["items"], [])
 
     def test_or_with_one_unknown_returns_match(self):
-        results = search_resumes_by_skills(["Python", "COBOL"], mode="or")["items"]
+        results = search_resumes_by_skill(["Python", "COBOL"], mode="or")["items"]
         self.assertGreaterEqual(len(results), 2)
 
     def test_case_insensitive(self):
-        lower = search_resumes_by_skills(["python"])["items"]
-        upper = search_resumes_by_skills(["Python"])["items"]
+        lower = search_resumes_by_skill(["python"])["items"]
+        upper = search_resumes_by_skill(["Python"])["items"]
         self.assertEqual({r["id"] for r in lower}, {r["id"] for r in upper})
 
     def test_each_result_has_matched_skills(self):
-        for r in search_resumes_by_skills(["Python"])["items"]:
+        for r in search_resumes_by_skill(["Python"])["items"]:
             self.assertIn("matched_skills", r)
             self.assertIsInstance(r["matched_skills"], list)
             self.assertIn("Python", r["matched_skills"])
 
     def test_result_is_serialisable(self):
         import json
-        json.dumps(search_resumes_by_skills(["Python", "Docker"])["items"])
+        json.dumps(search_resumes_by_skill(["Python", "Docker"])["items"])
+
+    def test_empty_list_returns_error(self):
+        result = search_resumes_by_skill([])
+        self.assertIn("error", result)
+
+    def test_list_of_blank_strings_returns_error(self):
+        result = search_resumes_by_skill(["  ", ""])
+        self.assertIn("error", result)
+
+    def test_regex_mode_respects_inner_match(self):
+        # Regression test: the pre-merge search_resumes_by_skills ignored `mode` for the
+        # per-skill match and always used substring "and" semantics internally.
+        results = search_resumes_by_skill(["^Python$"], mode="regex")["items"]
+        self.assertGreaterEqual(len(results), 2)
+        no_match = search_resumes_by_skill(["^Pytho$"], mode="regex")["items"]
+        self.assertEqual(no_match, [])
 
 
 # ── regex search mode ──────────────────────────────────────────────────────────
@@ -1067,6 +1089,45 @@ class TestRegexSearchMode(_ServerFixture):
     def test_search_resumes_regex_mode_matches(self):
         result = search_resumes(r"K[a-z]+netes", mode="regex")
         self.assertGreater(result["total_count"], 0)
+
+    def test_search_resumes_and_mode_requires_all_tokens(self):
+        results = search_resumes("Kubernetes xyzzy_impossible_9999", mode="and")["items"]
+        self.assertEqual(results, [])
+
+    def test_search_resumes_or_mode_matches_any_token(self):
+        results = search_resumes("Kubernetes xyzzy_impossible_9999", mode="or")["items"]
+        self.assertGreater(len(results), 0)
+
+
+# ── pagination validation ──────────────────────────────────────────────────────
+
+
+class TestPaginationValidation(_ServerFixture):
+    def test_zero_limit_returns_error(self):
+        result = search_skills("Python", limit=0)
+        self.assertIn("error", result)
+
+    def test_negative_limit_returns_error(self):
+        result = search_skills("Python", limit=-1)
+        self.assertIn("error", result)
+
+    def test_negative_offset_returns_error(self):
+        result = search_skills("Python", offset=-1)
+        self.assertIn("error", result)
+
+    def test_offset_past_end_returns_empty_not_error(self):
+        result = list_resume_summaries(offset=10_000)
+        self.assertNotIn("error", result)
+        self.assertEqual(result["items"], [])
+        self.assertFalse(result["has_more"])
+
+    def test_list_tool_also_validates(self):
+        result = list_work_experiences(limit=0)
+        self.assertIn("error", result)
+
+    def test_list_resumes_also_validates(self):
+        result = list_resumes(limit=-5)
+        self.assertIn("error", result)
 
 
 # ── ReloadHandler unit tests ──────────────────────────────────────────────────

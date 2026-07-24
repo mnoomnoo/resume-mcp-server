@@ -1,6 +1,6 @@
 # MCP Tools Reference
 
-Full parameter and return-shape reference for all 27 tools exposed by `resume-mcp-server`. Most `search_*` tools share the same match-mode conventions — see [Search behavior](../README.md#search-behavior) in the main README. All `list_*` and `search_*` tools share the same pagination envelope — see [Pagination](../README.md#pagination).
+Full parameter and return-shape reference for all 26 tools exposed by `resume-mcp-server`. All `search_*` tools — including `search_resumes` — share the same match-mode conventions: see [Search behavior](../README.md#search-behavior) in the main README. All `list_*` and `search_*` tools share the same pagination envelope and validation — see [Pagination](../README.md#pagination). Every tool's failure shape is `{"error": "..."}` — see [Error handling](../README.md#error-handling).
 
 ### `list_resume_summaries`
 
@@ -31,11 +31,13 @@ Returns: paginated envelope — `total_count` + `items`.
 
 ### `get_resume`
 
-Return the full extracted text of a document.
+Return the full extracted text of a document. Takes a file **path**, not a `resume_id` — use `get_resume_profile` or `list_resumes` to fetch structured data by `resume_id` instead.
 
 | Parameter | Type | Description |
 |---|---|---|
 | `path` | string | Relative path as returned by `list_resumes` |
+
+Returns: `{"text": "..."}` on success, `{"error": "..."}` if `path` is not found.
 
 ---
 
@@ -45,7 +47,9 @@ Get a resume's top-level fields (contact info, professional statement, education
 
 | Parameter | Type | Description |
 |---|---|---|
-| `resume_id` | string | Resume ID from `list_resume_summaries` or `search_resumes_by_name` |
+| `resume_id` | string | Resume ID from `list_resume_summaries` |
+
+Returns: the profile dict on success, `{"error": "..."}` if `resume_id` is not found.
 
 ---
 
@@ -57,7 +61,7 @@ Full-text search across all documents (case-insensitive), sorted by match count.
 |---|---|---|
 | `query` | string | Text to search for |
 | `doc_type` | string (optional) | Filter by type (same values as `list_resumes`) |
-| `mode` | string (optional) | `"literal"` *(default)* or `"regex"` — see [Search behavior](../README.md#search-behavior) |
+| `mode` | string (optional) | `"and"` *(default)*, `"or"`, or `"regex"` — see [Search behavior](../README.md#search-behavior) |
 | `limit` | integer (optional) | Maximum number of results (default `100`) |
 | `offset` | integer (optional) | Number of results to skip (default `0`) |
 
@@ -82,16 +86,16 @@ Returns: paginated envelope — `total_count` + `items`, where each item has `id
 
 ### `search_resumes_by_skill`
 
-Find which resumes list a given badge skill. Returns resume identity and matched skill names — more token-efficient than `list_resumes` when filtering by skill.
+Find which resumes list one or more given badge skills. Returns resume identity and matched skill names — more token-efficient than `list_resumes` when filtering by skill. Accepts either a single skill string or a list of skills to filter by multiple at once.
 
 | Parameter | Type | Description |
 |---|---|---|
-| `skill` | string | Skill title fragment to search for (case-insensitive, partial match) |
-| `mode` | string (optional) | `"and"` *(default)*, `"or"`, or `"regex"` — see [Search behavior](../README.md#search-behavior) |
+| `skill` | string or list of strings | Skill title fragment(s) to search for (case-insensitive, partial match) |
+| `mode` | string (optional) | For a single skill: `"and"` *(default)*, `"or"`, or `"regex"` — see [Search behavior](../README.md#search-behavior). For a list of skills, `mode` also controls whether a resume must match EACH skill (`"and"`) or ANY skill (`"or"`); `"regex"` combines multiple skills with OR semantics. |
 | `limit` | integer (optional) | Maximum number of results (default `100`) |
 | `offset` | integer (optional) | Number of results to skip (default `0`) |
 
-Returns: paginated envelope — `total_count` + `items`, where each item has `id`, `first_name`, `last_name`, `matched_skills`.
+Returns: paginated envelope — `total_count` + `items`, where each item has `id`, `first_name`, `last_name`, `matched_skills`. An empty list, or a list of only blank strings, returns `{"error": "..."}`.
 
 ---
 
@@ -137,7 +141,7 @@ List work experience entries, optionally scoped to a single resume and/or only c
 | `limit` | integer (optional) | Maximum number of results (default `100`) |
 | `offset` | integer (optional) | Number of results to skip (default `0`) |
 
-Returns: paginated envelope — `total_count` + `items`.
+Returns: paginated envelope — `total_count` + `items`. `{"error": "..."}` if `resume_id` is given but not found.
 
 ---
 
@@ -149,6 +153,8 @@ Get a single work experience entry with its achievement bullets.
 |---|---|---|
 | `id` | string | Work experience ID from `list_work_experiences` |
 
+Returns: the entry dict on success, `{"error": "..."}` if `id` is not found.
+
 ---
 
 ### `list_achievements`
@@ -157,11 +163,11 @@ List all achievement bullets, optionally scoped to a single resume.
 
 | Parameter | Type | Description |
 |---|---|---|
-| `resume_id` | string (optional) | Resume ID from `list_resumes` |
+| `resume_id` | string (optional) | Resume ID from `list_resume_summaries` |
 | `limit` | integer (optional) | Maximum number of results (default `100`) |
 | `offset` | integer (optional) | Number of results to skip (default `0`) |
 
-Returns: paginated envelope — `total_count` + `items`.
+Returns: paginated envelope — `total_count` + `items`. `{"error": "..."}` if `resume_id` is given but not found.
 
 ---
 
@@ -173,6 +179,8 @@ Get a single achievement bullet by ID.
 |---|---|---|
 | `id` | string | Achievement ID from `list_achievements` |
 
+Returns: the achievement dict on success, `{"error": "..."}` if `id` is not found.
+
 ---
 
 ### `search_achievements`
@@ -182,12 +190,12 @@ Search achievement descriptions directly, returning only matching bullets with m
 | Parameter | Type | Description |
 |---|---|---|
 | `query` | string | Text to search for in achievement descriptions (case-insensitive) |
-| `resume_id` | string (optional) | Resume ID to scope the search to one resume |
+| `resume_id` | string (optional) | Resume ID from `list_resume_summaries` to scope the search to one resume |
 | `mode` | string (optional) | `"and"` *(default)*, `"or"`, or `"regex"` — see [Search behavior](../README.md#search-behavior) |
 | `limit` | integer (optional) | Maximum number of results (default `100`) |
 | `offset` | integer (optional) | Number of results to skip (default `0`) |
 
-Returns: paginated envelope — `total_count` + `items`, where each item has `id`, `desc`, `company_name`, `position_title`, `work_experience_id`, `resume_id`.
+Returns: paginated envelope — `total_count` + `items`, where each item has `id`, `desc`, `company_name`, `position_title`, `work_experience_id`, `resume_id`. `{"error": "..."}` if `resume_id` is given but not found.
 
 ---
 
@@ -197,11 +205,11 @@ List all badge skills, optionally scoped to a single resume.
 
 | Parameter | Type | Description |
 |---|---|---|
-| `resume_id` | string (optional) | Resume ID from `list_resumes` |
+| `resume_id` | string (optional) | Resume ID from `list_resume_summaries` |
 | `limit` | integer (optional) | Maximum number of results (default `100`) |
 | `offset` | integer (optional) | Number of results to skip (default `0`) |
 
-Returns: paginated envelope — `total_count` + `items`.
+Returns: paginated envelope — `total_count` + `items`. `{"error": "..."}` if `resume_id` is given but not found.
 
 ---
 
@@ -212,6 +220,8 @@ Get a single badge skill by ID.
 | Parameter | Type | Description |
 |---|---|---|
 | `id` | string | Badge skill ID from `list_badge_skills` |
+
+Returns: the skill dict on success, `{"error": "..."}` if `id` is not found.
 
 ---
 
@@ -225,7 +235,7 @@ List side projects (personal/portfolio projects, distinct from work experience) 
 | `limit` | integer (optional) | Maximum number of results (default `100`) |
 | `offset` | integer (optional) | Number of results to skip (default `0`) |
 
-Returns: paginated envelope — `total_count` + `items`.
+Returns: paginated envelope — `total_count` + `items`. `{"error": "..."}` if `resume_id` is given but not found.
 
 ---
 
@@ -237,28 +247,30 @@ Get a single side project by ID, including the technologies it demonstrates.
 |---|---|---|
 | `id` | string | Side project ID from `list_side_projects` |
 
+Returns: the project dict on success, `{"error": "..."}` if `id` is not found.
+
 ---
 
 ### `search_side_projects`
 
-Search side projects by name, description, or associated technology.
+Search side projects by name, description, or associated technology. See also `search_side_projects_by_technology` for technology-only matching with a lighter-weight response shape.
 Each result includes a `resume_id` field identifying which resume the project belongs to.
 
 | Parameter | Type | Description |
 |---|---|---|
 | `query` | string | Text to search for (case-insensitive) |
-| `resume_id` | string (optional) | Resume ID to scope the search to one resume |
+| `resume_id` | string (optional) | Resume ID from `list_resume_summaries` to scope the search to one resume |
 | `mode` | string (optional) | `"and"` *(default)*, `"or"`, or `"regex"` — see [Search behavior](../README.md#search-behavior) |
 | `limit` | integer (optional) | Maximum number of results (default `100`) |
 | `offset` | integer (optional) | Number of results to skip (default `0`) |
 
-Returns: paginated envelope — `total_count` + `items`.
+Returns: paginated envelope — `total_count` + `items`. `{"error": "..."}` if `resume_id` is given but not found.
 
 ---
 
 ### `search_side_projects_by_technology`
 
-Find side projects that demonstrate competency with a given technology.
+Find side projects that demonstrate competency with a given technology. See also `search_side_projects` for broader name/description matching.
 
 | Parameter | Type | Description |
 |---|---|---|
@@ -281,7 +293,7 @@ List education entries (degree, institution, year, and relevant coursework/compe
 | `limit` | integer (optional) | Maximum number of results (default `100`) |
 | `offset` | integer (optional) | Number of results to skip (default `0`) |
 
-Returns: paginated envelope — `total_count` + `items`.
+Returns: paginated envelope — `total_count` + `items`. `{"error": "..."}` if `resume_id` is given but not found.
 
 ---
 
@@ -293,27 +305,29 @@ Get a single education entry by ID, including its competencies.
 |---|---|---|
 | `id` | string | Education entry ID from `list_education` |
 
+Returns: the entry dict on success, `{"error": "..."}` if `id` is not found.
+
 ---
 
 ### `search_education`
 
-Search education entries by institution, degree, or competency. Each result includes a `resume_id` field identifying which resume the entry belongs to.
+Search education entries by institution, degree, or competency. See also `search_education_by_competency` for competency-only matching with a lighter-weight response shape. Each result includes a `resume_id` field identifying which resume the entry belongs to.
 
 | Parameter | Type | Description |
 |---|---|---|
 | `query` | string | Text to search for (case-insensitive) |
-| `resume_id` | string (optional) | Resume ID to scope the search to one resume |
+| `resume_id` | string (optional) | Resume ID from `list_resume_summaries` to scope the search to one resume |
 | `mode` | string (optional) | `"and"` *(default)*, `"or"`, or `"regex"` — see [Search behavior](../README.md#search-behavior) |
 | `limit` | integer (optional) | Maximum number of results (default `100`) |
 | `offset` | integer (optional) | Number of results to skip (default `0`) |
 
-Returns: paginated envelope — `total_count` + `items`.
+Returns: paginated envelope — `total_count` + `items`. `{"error": "..."}` if `resume_id` is given but not found.
 
 ---
 
 ### `search_education_by_competency`
 
-Find education entries that demonstrate competency with a given skill — useful for matching a candidate's coursework/training to a specific position's requirements.
+Find education entries that demonstrate competency with a given skill — useful for matching a candidate's coursework/training to a specific position's requirements. See also `search_education` for broader institution/degree matching.
 
 | Parameter | Type | Description |
 |---|---|---|
@@ -345,18 +359,3 @@ Return badge skills ranked by how many resumes list them, in descending order. U
 | `limit` | integer (optional) | Maximum number of skills to return (default `20`) |
 
 Returns: list of `{ skill_id, skill_title, resume_count }`.
-
----
-
-### `search_resumes_by_skills`
-
-Find resumes that have specific skills. Uses the same partial token matching as `search_resumes_by_skill`, but accepts a list and applies AND/OR logic *across* the skill queries — e.g. find everyone with both Python and Docker.
-
-| Parameter | Type | Description |
-|---|---|---|
-| `skills` | list of strings | Skill title fragments to filter by, e.g. `["Python", "Docker"]` |
-| `mode` | string (optional) | `"and"` *(default)* — resume must have a match for **every** query; `"or"` — resume must have a match for **any** query. `"regex"` is not supported here (see [Search behavior](../README.md#search-behavior)) |
-| `limit` | integer (optional) | Maximum number of results (default `100`) |
-| `offset` | integer (optional) | Number of results to skip (default `0`) |
-
-Returns: paginated envelope — `total_count` + `items`, where each item has `id`, `first_name`, `last_name`, `matched_skills`.

@@ -194,6 +194,13 @@ class SkillFrequencyItem(BaseModel):
     resume_count: int
 
 
+def validate_pagination(limit: int, offset: int) -> None:
+    if limit <= 0:
+        raise ValueError(f"limit must be greater than 0, got {limit}")
+    if offset < 0:
+        raise ValueError(f"offset must be 0 or greater, got {offset}")
+
+
 class PaginatedResponse(BaseModel):
     total_count: int
     items: list[Any]
@@ -203,6 +210,7 @@ class PaginatedResponse(BaseModel):
 
     @classmethod
     def paginate(cls, all_items: list[Any], offset: int, limit: int) -> "PaginatedResponse":
+        validate_pagination(limit, offset)
         total = len(all_items)
         page = all_items[offset:offset + limit]
         shown = offset + len(page)

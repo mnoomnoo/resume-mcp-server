@@ -269,9 +269,11 @@ Most `search_*` tools split the query on whitespace and support three match mode
 
 **Single-word queries** behave identically in `and`/`or` mode.
 
-`search_resumes` isn't tokenized (it's a whole-document keyword search), so its `mode` only accepts `"literal"` *(default)* or `"regex"`.
+Every `search_*` tool — including `search_resumes`, the whole-document keyword search — now shares this same `"and"`/`"or"`/`"regex"` vocabulary.
 
-`search_resumes_by_skills` does not support `"regex"` — its `mode` already means something different (AND/OR *across* the list of skill queries, not within one query's tokens).
+`search_resumes_by_skill` accepts either a single skill string or a list of skills. For a list, `mode` does double duty: it also controls whether a resume must match EACH skill in the list (`"and"`) or ANY skill (`"or"`); `"regex"` mode combines multiple skills with OR semantics.
+
+An empty query or an empty skill list returns `{"error": "..."}` rather than an empty result — this distinguishes a caller mistake from a legitimate zero-match search.
 
 ---
 
@@ -291,22 +293,31 @@ All `list_*` and `search_*` tools accept `limit` (default `100`) and `offset` (d
 
 `total_count` is the full match count before slicing. `has_more` and `next_offset` tell you directly whether to page further — no need to compute `offset + len(items) < total_count` yourself — and `message` restates that in plain language, ready to act on. When there's nothing left, `has_more` is `false`, `next_offset` is `null`, and `message` reads `"All N results shown."`.
 
+`limit` must be greater than 0 and `offset` must be 0 or greater — otherwise the tool returns `{"error": "..."}`. An `offset` beyond the total result count is not an error; it's a valid "past the end" page (`items: []`, `has_more: false`).
+
+---
+
+## Error handling
+
+Every tool returns a dict. On failure, the dict is exactly `{"error": "<message>"}` — this is the only failure shape in the API, so a caller can check for the `"error"` key regardless of which tool it called. This covers: not-found IDs, a `resume_id` filter that doesn't match any resume, invalid regex patterns, and invalid `limit`/`offset` values. A `resume_id` filter that *does* match a resume but simply has zero matching child records (e.g. `list_work_experiences(resume_id=<valid>)` for someone with no work history) is not an error — it returns an empty `items` list.
+
+`get_resume`'s success shape is `{"text": "..."}` so that success and failure are both dicts, distinguishable by key.
+
 ---
 
 ## MCP Tools
 
-27 tools are exposed, covering full-text search, skill lookup, company and role queries, achievement mining, education search, collection analytics, and more.
+26 tools are exposed, covering full-text search, skill lookup, company and role queries, achievement mining, education search, collection analytics, and more.
 
 | Tool | Description |
 |---|---|
 | `list_resume_summaries` | Lightweight identity records (id, name, email, phone) for orienting before fetching details |
 | `list_resumes` | List all documents, optionally filtered by type |
-| `get_resume` | Full extracted text of a document |
+| `get_resume` | Full extracted text of a document, keyed by path (not resume_id) |
 | `get_resume_profile` | A resume's top-level fields (contact info, statement, education) without nested lists |
 | `search_resumes` | Full-text search across all documents, sorted by match count |
 | `search_resumes_by_name` | Find resumes by person name |
-| `search_resumes_by_skill` | Find which resumes list a given badge skill |
-| `search_resumes_by_skills` | Find resumes matching a list of skills with AND/OR logic across the list |
+| `search_resumes_by_skill` | Find which resumes list one or more given badge skills (accepts a string or a list) |
 | `search_skills` | Search badge skills (technologies, tools, languages) by title |
 | `search_work_experiences` | Search by company name, position title, or achievement bullets |
 | `list_work_experiences` | List work experience entries, optionally scoped to a resume or current roles only |
@@ -328,3 +339,15 @@ All `list_*` and `search_*` tools accept `limit` (default `100`) and `offset` (d
 | `get_skill_frequency` | Badge skills ranked by how many resumes list them |
 
 See [docs/TOOLS.md](docs/TOOLS.md) for full parameter tables and return shapes for every tool.
+
+---
+
+## Migrating from 2.x
+
+Version 3.0.0 makes several breaking changes to the tool surface, aimed at making the API easier for smaller/local LLMs to use correctly:
+
+- **`search_resumes_by_skills` removed.** Use `search_resumes_by_skill` — it now accepts either a single skill string or a list of skills.
+- **`search_resumes`'s `mode="literal"` renamed to `mode="and"`.** For single-word queries this is a no-op; for multi-word queries it now requires all words to appear (not necessarily adjacent) rather than an exact phrase match. Use `mode="regex"` for exact-phrase matching if needed.
+- **Not-found and bad-filter-id responses changed shape.** Tools that used to return a bare string like `"Error: work experience 'x' not found"` now return `{"error": "work experience 'x' not found"}`. Tools that used to silently return an empty result for an unknown `resume_id` filter now return `{"error": "resume 'x' not found"}` instead.
+- **`get_resume`'s success shape changed.** It used to return the document text directly as a string; it now returns `{"text": "..."}`.
+- **`limit`/`offset` are now validated.** `limit <= 0` or `offset < 0` now return `{"error": "..."}` instead of relying on Python's slicing semantics.

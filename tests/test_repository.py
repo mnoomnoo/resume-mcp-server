@@ -122,8 +122,9 @@ class TestBadgeSkillOrdering(unittest.TestCase):
         self.assertEqual([s["title"] for s in self.repo.list_badge_skills(resume_id=resp_a.id).items], ["Python", "Rust", "Go"])
         self.assertEqual([s["title"] for s in self.repo.list_badge_skills(resume_id=resp_b.id).items], ["Go", "Python"])
 
-    def test_list_unknown_resume_returns_empty(self):
-        self.assertEqual(self.repo.list_badge_skills(resume_id="bad-id").items, [])
+    def test_list_unknown_resume_raises(self):
+        with self.assertRaises(ValueError):
+            self.repo.list_badge_skills(resume_id="bad-id")
 
 
 # ── work experience ordering ──────────────────────────────────────────────────
@@ -141,8 +142,9 @@ class TestWorkExperienceOrdering(unittest.TestCase):
         wes = self.repo.list_work_experiences(resume_id=resp.id).items
         self.assertEqual([w["company_name"] for w in wes], ["Acme", "Globex", "Initech"])
 
-    def test_list_unknown_resume_returns_empty(self):
-        self.assertEqual(self.repo.list_work_experiences(resume_id="bad-id").items, [])
+    def test_list_unknown_resume_raises(self):
+        with self.assertRaises(ValueError):
+            self.repo.list_work_experiences(resume_id="bad-id")
 
 
 # ── achievement ordering ──────────────────────────────────────────────────────
@@ -186,8 +188,9 @@ class TestAchievementOrdering(unittest.TestCase):
         self.assertEqual(len(achs), 2)
         self.assertTrue(all("Acme" in a["desc"] for a in achs))
 
-    def test_list_unknown_resume_returns_empty(self):
-        self.assertEqual(self.repo.list_achievements(resume_id="bad-id").items, [])
+    def test_list_unknown_resume_raises(self):
+        with self.assertRaises(ValueError):
+            self.repo.list_achievements(resume_id="bad-id")
 
 
 # ── find helpers ──────────────────────────────────────────────────────────────
@@ -750,8 +753,9 @@ class TestSideProjects(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["name"], "Project A")
 
-    def test_list_side_projects_unknown_resume_returns_empty(self):
-        self.assertEqual(self.repo.list_side_projects(resume_id="bad-id").items, [])
+    def test_list_side_projects_unknown_resume_raises(self):
+        with self.assertRaises(ValueError):
+            self.repo.list_side_projects(resume_id="bad-id")
 
     def test_search_by_name(self):
         resp = self.repo.add_resume(_make_resume(projects=[self._project(name="Resume Bot")]))
@@ -1032,8 +1036,9 @@ class TestEducation(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["institution"], "Reed College")
 
-    def test_list_education_unknown_resume_returns_empty(self):
-        self.assertEqual(self.repo.list_education(resume_id="bad-id").items, [])
+    def test_list_education_unknown_resume_raises(self):
+        with self.assertRaises(ValueError):
+            self.repo.list_education(resume_id="bad-id")
 
     def test_search_education_by_institution(self):
         resp = self.repo.add_resume(_make_resume(education_entries=[_education(institution="University of Oregon")]))
@@ -1301,26 +1306,27 @@ class TestSkillFrequency(unittest.TestCase):
         self.assertEqual(results[0].skill_title, "Python")
 
 
-# ── search_resumes_by_skills ──────────────────────────────────────────────────
+# ── search_resumes_by_skill (list form) ────────────────────────────────────────
 
-class TestSearchResumesBySkills(unittest.TestCase):
+class TestSearchResumesBySkillList(unittest.TestCase):
     def setUp(self):
         self.repo = ResumeRepository()
 
-    def test_empty_skills_list_returns_empty(self):
+    def test_empty_skills_list_raises(self):
         self.repo.add_resume(_make_resume(skills=["Python"]))
-        self.assertEqual(self.repo.search_resumes_by_skills([]).items, [])
+        with self.assertRaises(ValueError):
+            self.repo.search_resumes_by_skill([])
 
-    def test_single_skill_same_as_search_resumes_by_skill(self):
+    def test_single_skill_same_as_string_form(self):
         resp = self.repo.add_resume(_make_resume("Nina", "Nash", skills=["Python", "Go"]))
         single = self.repo.search_resumes_by_skill("Python").items
-        multi = self.repo.search_resumes_by_skills(["Python"]).items
+        multi = self.repo.search_resumes_by_skill(["Python"]).items
         self.assertEqual({r["id"] for r in single}, {r["id"] for r in multi})
 
     def test_and_mode_requires_all_skills(self):
         resp_a = self.repo.add_resume(_make_resume("Alice", "A", skills=["Python", "Docker"]))
         self.repo.add_resume(_make_resume("Bob", "B", skills=["Python"]))
-        results = self.repo.search_resumes_by_skills(["Python", "Docker"], mode="and").items
+        results = self.repo.search_resumes_by_skill(["Python", "Docker"], mode="and").items
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["id"], resp_a.id)
 
@@ -1328,43 +1334,43 @@ class TestSearchResumesBySkills(unittest.TestCase):
         resp_a = self.repo.add_resume(_make_resume("Alice", "A", skills=["Python"]))
         resp_b = self.repo.add_resume(_make_resume("Bob", "B", skills=["Docker"]))
         self.repo.add_resume(_make_resume("Carol", "C", skills=["Rust"]))
-        results = self.repo.search_resumes_by_skills(["Python", "Docker"], mode="or").items
+        results = self.repo.search_resumes_by_skill(["Python", "Docker"], mode="or").items
         self.assertEqual({r["id"] for r in results}, {resp_a.id, resp_b.id})
 
     def test_unknown_skill_returns_empty(self):
         self.repo.add_resume(_make_resume(skills=["Python"]))
-        self.assertEqual(self.repo.search_resumes_by_skills(["COBOL"]).items, [])
+        self.assertEqual(self.repo.search_resumes_by_skill(["COBOL"]).items, [])
 
     def test_and_mode_one_unknown_one_known_returns_empty(self):
         self.repo.add_resume(_make_resume(skills=["Python"]))
-        self.assertEqual(self.repo.search_resumes_by_skills(["Python", "COBOL"], mode="and").items, [])
+        self.assertEqual(self.repo.search_resumes_by_skill(["Python", "COBOL"], mode="and").items, [])
 
     def test_or_mode_one_unknown_one_known_returns_match(self):
         resp = self.repo.add_resume(_make_resume(skills=["Python"]))
-        results = self.repo.search_resumes_by_skills(["Python", "COBOL"], mode="or").items
+        results = self.repo.search_resumes_by_skill(["Python", "COBOL"], mode="or").items
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["id"], resp.id)
 
     def test_case_insensitive_match(self):
         resp = self.repo.add_resume(_make_resume(skills=["Python"]))
-        results = self.repo.search_resumes_by_skills(["python"]).items
+        results = self.repo.search_resumes_by_skill(["python"]).items
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["id"], resp.id)
 
     def test_partial_token_match(self):
         resp = self.repo.add_resume(_make_resume(skills=["Machine Learning"]))
-        results = self.repo.search_resumes_by_skills(["machine learning"]).items
+        results = self.repo.search_resumes_by_skill(["machine learning"]).items
         self.assertEqual(len(results), 1)
 
     def test_partial_token_does_not_match_wrong_phrase(self):
         self.repo.add_resume(_make_resume(skills=["Machine Translation"]))
         # "machine learning" with AND requires both "machine" and "learning" in the skill title
-        results = self.repo.search_resumes_by_skills(["machine learning"]).items
+        results = self.repo.search_resumes_by_skill(["machine learning"]).items
         self.assertEqual(results, [])
 
     def test_matched_skills_only_includes_matched(self):
         resp = self.repo.add_resume(_make_resume("Alice", "A", skills=["Python", "Docker", "Rust"]))
-        results = self.repo.search_resumes_by_skills(["Python"], mode="and").items
+        results = self.repo.search_resumes_by_skill(["Python"], mode="and").items
         self.assertEqual(len(results), 1)
         self.assertIn("Python", results[0]["matched_skills"])
         self.assertNotIn("Docker", results[0]["matched_skills"])
@@ -1372,21 +1378,21 @@ class TestSearchResumesBySkills(unittest.TestCase):
 
     def test_result_shape_matches_search_resumes_by_skill(self):
         self.repo.add_resume(_make_resume("Tara", "T", skills=["Java"]))
-        results = self.repo.search_resumes_by_skills(["Java"]).items
+        results = self.repo.search_resumes_by_skill(["Java"]).items
         self.assertEqual(len(results), 1)
         self.assertEqual(set(results[0].keys()), {"id", "first_name", "last_name", "matched_skills"})
 
     def test_three_skills_and_all_required(self):
         resp = self.repo.add_resume(_make_resume(skills=["Python", "Docker", "Kubernetes"]))
         self.repo.add_resume(_make_resume(skills=["Python", "Docker"]))
-        results = self.repo.search_resumes_by_skills(["Python", "Docker", "Kubernetes"], mode="and").items
+        results = self.repo.search_resumes_by_skill(["Python", "Docker", "Kubernetes"], mode="and").items
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["id"], resp.id)
 
     def test_and_mode_both_have_all_skills_both_returned(self):
         resp_a = self.repo.add_resume(_make_resume("Alice", "A", skills=["Python", "Docker"]))
         resp_b = self.repo.add_resume(_make_resume("Bob", "B", skills=["Python", "Docker"]))
-        results = self.repo.search_resumes_by_skills(["Python", "Docker"], mode="and").items
+        results = self.repo.search_resumes_by_skill(["Python", "Docker"], mode="and").items
         self.assertEqual({r["id"] for r in results}, {resp_a.id, resp_b.id})
 
 
@@ -1425,10 +1431,17 @@ class TestPagination(unittest.TestCase):
         self.assertEqual(result.total_count, 3)
         self.assertEqual(result.items, [])
 
-    def test_list_resumes_limit_zero(self):
-        result = self.repo.list_resumes(limit=0)
-        self.assertEqual(result.total_count, 3)
-        self.assertEqual(result.items, [])
+    def test_list_resumes_limit_zero_raises(self):
+        with self.assertRaises(ValueError):
+            self.repo.list_resumes(limit=0)
+
+    def test_list_resumes_negative_limit_raises(self):
+        with self.assertRaises(ValueError):
+            self.repo.list_resumes(limit=-1)
+
+    def test_list_resumes_negative_offset_raises(self):
+        with self.assertRaises(ValueError):
+            self.repo.list_resumes(offset=-1)
 
     def test_total_count_reflects_full_collection_not_slice(self):
         result = self.repo.list_resumes(limit=1, offset=0)

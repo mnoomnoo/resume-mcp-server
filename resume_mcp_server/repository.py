@@ -247,6 +247,13 @@ class ResumeRepository:
 
     # ── List all ──────────────────────────────────────────────────────────────
 
+    def resume_exists(self, resume_id: ID) -> bool:
+        return resume_id in self._resumes_by_id
+
+    def _require_resume(self, resume_id: ID) -> None:
+        if not self.resume_exists(resume_id):
+            raise ValueError(f"resume {resume_id!r} not found")
+
     def list_resumes(self, limit: int = 100, offset: int = 0) -> PaginatedResponse:
         all_items = [self._resume_to_response(m).model_dump() for m in self._resumes]
         return PaginatedResponse.paginate(all_items, offset, limit)
@@ -283,9 +290,8 @@ class ResumeRepository:
         if resume_id is None:
             all_items = [self._achievement_to_response(a).model_dump() for a in self._achievements]
         else:
-            resume = self._resumes_by_id.get(resume_id)
-            if not resume:
-                return PaginatedResponse.paginate([], offset, limit)
+            self._require_resume(resume_id)
+            resume = self._resumes_by_id[resume_id]
             we_ids = set(resume.work_experiences)
             achievement_ids: set[ID] = set()
             for wid in we_ids:
@@ -299,9 +305,8 @@ class ResumeRepository:
         if resume_id is None:
             results = self._work_experiences
         else:
-            resume = self._resumes_by_id.get(resume_id)
-            if not resume:
-                return PaginatedResponse.paginate([], offset, limit)
+            self._require_resume(resume_id)
+            resume = self._resumes_by_id[resume_id]
             results = [self._work_experiences_by_id[wid] for wid in resume.work_experiences if wid in self._work_experiences_by_id]
         if current_only:
             results = [w for w in results if re.search(r"present", w.end_date, re.IGNORECASE)]
@@ -312,9 +317,8 @@ class ResumeRepository:
         if resume_id is None:
             all_items = [self._badge_skill_to_response(b).model_dump() for b in self._badge_skills]
         else:
-            resume = self._resumes_by_id.get(resume_id)
-            if not resume:
-                return PaginatedResponse.paginate([], offset, limit)
+            self._require_resume(resume_id)
+            resume = self._resumes_by_id[resume_id]
             all_items = [
                 self._badge_skill_to_response(self._badge_skills_by_id[bid]).model_dump()
                 for bid in resume.badge_skills
@@ -326,9 +330,8 @@ class ResumeRepository:
         if resume_id is None:
             all_items = [self._side_project_to_response(p).model_dump() for p in self._side_projects]
         else:
-            resume = self._resumes_by_id.get(resume_id)
-            if not resume:
-                return PaginatedResponse.paginate([], offset, limit)
+            self._require_resume(resume_id)
+            resume = self._resumes_by_id[resume_id]
             all_items = [
                 self._side_project_to_response(self._side_projects_by_id[pid]).model_dump()
                 for pid in resume.side_projects
@@ -340,9 +343,8 @@ class ResumeRepository:
         if resume_id is None:
             all_items = [self._education_to_response(e).model_dump() for e in self._education]
         else:
-            resume = self._resumes_by_id.get(resume_id)
-            if not resume:
-                return PaginatedResponse.paginate([], offset, limit)
+            self._require_resume(resume_id)
+            resume = self._resumes_by_id[resume_id]
             all_items = [
                 self._education_to_response(self._education_by_id[eid]).model_dump()
                 for eid in resume.education_entries
@@ -389,13 +391,14 @@ class ResumeRepository:
             if sid in self._badge_skills_by_id
         ]
 
-    def search_resumes_by_skills(self, skills: list[str], mode: str = "and", limit: int = 100, offset: int = 0) -> PaginatedResponse:
-        if not skills:
-            return PaginatedResponse.paginate([], offset, limit)
+    def search_resumes_by_skill(self, skill: str | list[str], mode: str = "and", limit: int = 100, offset: int = 0) -> PaginatedResponse:
+        skills = [skill] if isinstance(skill, str) else skill
+        if not skills or not any(s.strip() for s in skills):
+            raise ValueError("skill must contain at least one non-empty value")
         skill_match_groups: list[set[ID]] = []
-        for skill in skills:
-            matcher = _make_matcher(skill, "and")
-            matched_ids = {s.id for s in self._badge_skills if matcher(s.title)}
+        for s in skills:
+            matcher = _make_matcher(s, mode)
+            matched_ids = {bs.id for bs in self._badge_skills if matcher(bs.title)}
             skill_match_groups.append(matched_ids)
         valid_groups = [g for g in skill_match_groups if g]
         if not valid_groups or (mode.lower() == "and" and len(valid_groups) < len(skill_match_groups)):
@@ -453,6 +456,8 @@ class ResumeRepository:
         return PaginatedResponse.paginate(results, offset, limit)
 
     def search_achievements(self, query: str, resume_id: ID | None = None, mode: str = "and", limit: int = 100, offset: int = 0) -> PaginatedResponse:
+        if resume_id is not None:
+            self._require_resume(resume_id)
         matches = _make_matcher(query, mode)
         results = []
         for we in self._work_experiences:
@@ -472,6 +477,8 @@ class ResumeRepository:
         return PaginatedResponse.paginate(results, offset, limit)
 
     def search_side_projects(self, query: str, resume_id: ID | None = None, mode: str = "and", limit: int = 100, offset: int = 0) -> PaginatedResponse:
+        if resume_id is not None:
+            self._require_resume(resume_id)
         matches = _make_matcher(query, mode)
         results = []
         for p in self._side_projects:
@@ -527,6 +534,8 @@ class ResumeRepository:
         return PaginatedResponse.paginate(results, offset, limit)
 
     def search_education(self, query: str, resume_id: ID | None = None, mode: str = "and", limit: int = 100, offset: int = 0) -> PaginatedResponse:
+        if resume_id is not None:
+            self._require_resume(resume_id)
         matches = _make_matcher(query, mode)
         results = []
         for e in self._education:
@@ -564,22 +573,5 @@ class ResumeRepository:
                         "year": e.year,
                         "matched_competencies": titles,
                         "resume_id": self._education_to_resume.get(e.id),
-                    })
-        return PaginatedResponse.paginate(results, offset, limit)
-
-    def search_resumes_by_skill(self, skill: str, mode: str = "and", limit: int = 100, offset: int = 0) -> PaginatedResponse:
-        matches = _make_matcher(skill, mode)
-        matching_ids = {s.id for s in self._badge_skills if matches(s.title)}
-        results = []
-        if matching_ids:
-            for r in self._resumes:
-                matched = matching_ids & set(r.badge_skills)
-                if matched:
-                    titles = [self._badge_skills_by_id[sid].title for sid in matched if sid in self._badge_skills_by_id]
-                    results.append({
-                        "id": r.id,
-                        "first_name": r.first_name,
-                        "last_name": r.last_name,
-                        "matched_skills": titles,
                     })
         return PaginatedResponse.paginate(results, offset, limit)
