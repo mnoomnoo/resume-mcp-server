@@ -146,7 +146,7 @@ class TestServerUninitialised(unittest.TestCase):
 
     def test_search_resumes_raises(self):
         with self.assertRaises(RuntimeError):
-            search_resumes("query")
+            search_resumes("query")["items"]
 
 
 # ── Empty directory ───────────────────────────────────────────────────────────
@@ -182,7 +182,7 @@ class TestServerEmptyDir(unittest.TestCase):
         self.assertIn("Error", result)
 
     def test_search_resumes_empty(self):
-        self.assertEqual(search_resumes("python"), [])
+        self.assertEqual(search_resumes("python")["items"], [])
 
     # ── repository-layer tools ─────────────────────────────────────────────────
 
@@ -195,19 +195,19 @@ class TestServerEmptyDir(unittest.TestCase):
         self.assertIn("Error", result)
 
     def test_search_skills_empty(self):
-        self.assertEqual(search_skills("python"), [])
+        self.assertEqual(search_skills("python")["items"], [])
 
     def test_search_work_experiences_empty(self):
-        self.assertEqual(search_work_experiences("engineer"), [])
+        self.assertEqual(search_work_experiences("engineer")["items"], [])
 
     def test_search_achievements_empty(self):
-        self.assertEqual(search_achievements("led"), [])
+        self.assertEqual(search_achievements("led")["items"], [])
 
     def test_search_resumes_by_name_empty(self):
-        self.assertEqual(search_resumes_by_name("Jane"), [])
+        self.assertEqual(search_resumes_by_name("Jane")["items"], [])
 
     def test_search_resumes_by_skill_empty(self):
-        self.assertEqual(search_resumes_by_skill("Docker"), [])
+        self.assertEqual(search_resumes_by_skill("Docker")["items"], [])
 
     def test_list_work_experiences_empty(self):
         self.assertEqual(list_work_experiences()["items"], [])
@@ -242,10 +242,10 @@ class TestServerEmptyDir(unittest.TestCase):
         self.assertIn("Error", result)
 
     def test_search_side_projects_empty(self):
-        self.assertEqual(search_side_projects("python"), [])
+        self.assertEqual(search_side_projects("python")["items"], [])
 
     def test_search_side_projects_by_technology_empty(self):
-        self.assertEqual(search_side_projects_by_technology("python"), [])
+        self.assertEqual(search_side_projects_by_technology("python")["items"], [])
 
 
 # ── Collection-layer tools ────────────────────────────────────────────────────
@@ -318,11 +318,11 @@ class TestGetResume(_ServerFixture):
 
 class TestSearchResumes(_ServerFixture):
     def test_match_returns_results(self):
-        results = search_resumes("Kubernetes")
+        results = search_resumes("Kubernetes")["items"]
         self.assertGreater(len(results), 0)
 
     def test_result_has_required_fields(self):
-        results = search_resumes("Python")
+        results = search_resumes("Python")["items"]
         for r in results:
             self.assertIn("path", r)
             self.assertIn("filename", r)
@@ -331,26 +331,26 @@ class TestSearchResumes(_ServerFixture):
             self.assertIn("snippet", r)
 
     def test_match_count_is_positive(self):
-        results = search_resumes("Python")
+        results = search_resumes("Python")["items"]
         self.assertTrue(all(r["match_count"] > 0 for r in results))
 
     def test_no_match_returns_empty(self):
-        results = search_resumes("xyzzy_impossible_9999")
+        results = search_resumes("xyzzy_impossible_9999")["items"]
         self.assertEqual(results, [])
 
     def test_doc_type_filter_limits_results(self):
-        all_results = search_resumes("the")
-        resume_results = search_resumes("the", doc_type="resume")
+        all_results = search_resumes("the")["items"]
+        resume_results = search_resumes("the", doc_type="resume")["items"]
         self.assertLessEqual(len(resume_results), len(all_results))
         self.assertTrue(all(r["doc_type"] == "resume" for r in resume_results))
 
     def test_snippet_contains_query_context(self):
-        results = search_resumes("pipeline")
+        results = search_resumes("pipeline")["items"]
         self.assertTrue(all(isinstance(r["snippet"], str) for r in results))
 
     def test_case_insensitive_match(self):
-        lower = search_resumes("kubernetes")
-        upper = search_resumes("KUBERNETES")
+        lower = search_resumes("kubernetes")["items"]
+        upper = search_resumes("KUBERNETES")["items"]
         self.assertEqual(len(lower), len(upper))
 
 
@@ -566,7 +566,7 @@ class TestListSideProjects(_ServerFixture):
 
     def test_resume_id_filter(self):
         all_count = list_side_projects()["total_count"]
-        resume_id = next(p for p in search_resumes_by_name("Jane"))["id"]
+        resume_id = next(p for p in search_resumes_by_name("Jane")["items"])["id"]
         results = list_side_projects(resume_id=resume_id)["items"]
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["name"], "Resume Bot")
@@ -594,40 +594,40 @@ class TestGetSideProject(_ServerFixture):
 
 class TestSearchSideProjects(_ServerFixture):
     def test_match_by_name(self):
-        results = search_side_projects("Resume Bot")
+        results = search_side_projects("Resume Bot")["items"]
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["name"], "Resume Bot")
         self.assertIn("resume_id", results[0])
 
     def test_match_by_description(self):
-        results = search_side_projects("Model Context Protocol")
+        results = search_side_projects("Model Context Protocol")["items"]
         self.assertEqual(len(results), 1)
 
     def test_no_match_returns_empty(self):
-        self.assertEqual(search_side_projects("quantum entanglement"), [])
+        self.assertEqual(search_side_projects("quantum entanglement")["items"], [])
 
     def test_results_are_serialisable(self):
         import json
-        json.dumps(search_side_projects("Resume"))
+        json.dumps(search_side_projects("Resume")["items"])
 
 
 class TestSearchSideProjectsByTechnology(_ServerFixture):
     def test_match_returns_results(self):
-        results = search_side_projects_by_technology("Python")
+        results = search_side_projects_by_technology("Python")["items"]
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["name"], "Resume Bot")
         self.assertIn("Python", results[0]["matched_technologies"])
 
     def test_partial_match(self):
-        results = search_side_projects_by_technology("fastmcp")
+        results = search_side_projects_by_technology("fastmcp")["items"]
         self.assertEqual(len(results), 1)
 
     def test_no_match_returns_empty(self):
-        self.assertEqual(search_side_projects_by_technology("COBOL"), [])
+        self.assertEqual(search_side_projects_by_technology("COBOL")["items"], [])
 
     def test_results_are_serialisable(self):
         import json
-        json.dumps(search_side_projects_by_technology("Python"))
+        json.dumps(search_side_projects_by_technology("Python")["items"])
 
 
 # ── Search tools ──────────────────────────────────────────────────────────────
@@ -635,30 +635,30 @@ class TestSearchSideProjectsByTechnology(_ServerFixture):
 
 class TestSearchSkills(_ServerFixture):
     def test_exact_match(self):
-        results = search_skills("Python")
+        results = search_skills("Python")["items"]
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["title"], "Python")
 
     def test_partial_match(self):
-        results = search_skills("kube")
+        results = search_skills("kube")["items"]
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["title"], "Kubernetes")
 
     def test_case_insensitive(self):
-        lower = search_skills("python")
-        upper = search_skills("PYTHON")
+        lower = search_skills("python")["items"]
+        upper = search_skills("PYTHON")["items"]
         self.assertEqual(len(lower), len(upper))
         self.assertEqual(lower[0]["title"], upper[0]["title"])
 
     def test_no_match_returns_empty(self):
-        self.assertEqual(search_skills("COBOL"), [])
+        self.assertEqual(search_skills("COBOL")["items"], [])
 
     def test_results_are_serialisable(self):
         import json
-        json.dumps(search_skills("Docker"))
+        json.dumps(search_skills("Docker")["items"])
 
     def test_result_has_id_and_title(self):
-        results = search_skills("Docker")
+        results = search_skills("Docker")["items"]
         self.assertGreater(len(results), 0)
         for r in results:
             self.assertIn("id", r)
@@ -667,28 +667,28 @@ class TestSearchSkills(_ServerFixture):
 
 class TestSearchWorkExperiences(_ServerFixture):
     def test_by_company_name(self):
-        results = search_work_experiences("Acme")
+        results = search_work_experiences("Acme")["items"]
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["company_name"], "Acme Corp")
 
     def test_by_position_title(self):
-        results = search_work_experiences("DevOps")
+        results = search_work_experiences("DevOps")["items"]
         self.assertGreater(len(results), 0)
         self.assertTrue(any(r["position_title"] == "DevOps Engineer" for r in results))
 
     def test_by_achievement_description(self):
-        results = search_work_experiences("pipeline")
+        results = search_work_experiences("pipeline")["items"]
         self.assertGreater(len(results), 0)
 
     def test_result_includes_resume_id(self):
-        results = search_work_experiences("Engineer")
+        results = search_work_experiences("Engineer")["items"]
         self.assertTrue(all("resume_id" in r for r in results))
 
     def test_no_match_returns_empty(self):
-        self.assertEqual(search_work_experiences("xyzzy_impossible"), [])
+        self.assertEqual(search_work_experiences("xyzzy_impossible")["items"], [])
 
     def test_results_are_dicts_with_required_fields(self):
-        results = search_work_experiences("Engineer")
+        results = search_work_experiences("Engineer")["items"]
         for r in results:
             self.assertIn("id", r)
             self.assertIn("company_name", r)
@@ -696,20 +696,20 @@ class TestSearchWorkExperiences(_ServerFixture):
 
     def test_results_are_serialisable(self):
         import json
-        json.dumps(search_work_experiences("Engineer"))
+        json.dumps(search_work_experiences("Engineer")["items"])
 
 
 class TestSearchAchievements(_ServerFixture):
     def test_match_returns_results(self):
-        results = search_achievements("pipeline")
+        results = search_achievements("pipeline")["items"]
         self.assertGreater(len(results), 0)
 
     def test_matching_text_in_desc(self):
-        results = search_achievements("pipeline")
+        results = search_achievements("pipeline")["items"]
         self.assertTrue(all("pipeline" in r["desc"].lower() for r in results))
 
     def test_result_includes_parent_context(self):
-        results = search_achievements("pipeline")
+        results = search_achievements("pipeline")["items"]
         for r in results:
             self.assertIn("company_name", r)
             self.assertIn("position_title", r)
@@ -718,53 +718,53 @@ class TestSearchAchievements(_ServerFixture):
 
     def test_scoped_by_resume_id(self):
         jane_id = next(s["id"] for s in list_resume_summaries()["items"] if s["first_name"] == "Jane")
-        results = search_achievements("engineers", resume_id=jane_id)
+        results = search_achievements("engineers", resume_id=jane_id)["items"]
         self.assertTrue(all(r["resume_id"] == jane_id for r in results))
 
     def test_wrong_scope_returns_empty(self):
         john_id = next(s["id"] for s in list_resume_summaries()["items"] if s["first_name"] == "John")
         # Jane has "Mentored...engineers" but John does not
-        results = search_achievements("mentored", resume_id=john_id)
+        results = search_achievements("mentored", resume_id=john_id)["items"]
         self.assertEqual(results, [])
 
     def test_no_match_returns_empty(self):
-        self.assertEqual(search_achievements("xyzzy_impossible_9999"), [])
+        self.assertEqual(search_achievements("xyzzy_impossible_9999")["items"], [])
 
     def test_case_insensitive(self):
-        lower = search_achievements("pipeline")
-        upper = search_achievements("PIPELINE")
+        lower = search_achievements("pipeline")["items"]
+        upper = search_achievements("PIPELINE")["items"]
         self.assertEqual(len(lower), len(upper))
 
     def test_results_are_serialisable(self):
         import json
-        json.dumps(search_achievements("pipeline"))
+        json.dumps(search_achievements("pipeline")["items"])
 
 
 class TestSearchResumesByName(_ServerFixture):
     def test_first_name_match(self):
-        results = search_resumes_by_name("Jane")
+        results = search_resumes_by_name("Jane")["items"]
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["first_name"], "Jane")
 
     def test_last_name_match(self):
-        results = search_resumes_by_name("Smith")
+        results = search_resumes_by_name("Smith")["items"]
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["last_name"], "Smith")
 
     def test_partial_match(self):
-        results = search_resumes_by_name("Jo")
+        results = search_resumes_by_name("Jo")["items"]
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["first_name"], "John")
 
     def test_case_insensitive(self):
-        self.assertEqual(len(search_resumes_by_name("jane")), 1)
-        self.assertEqual(len(search_resumes_by_name("SMITH")), 1)
+        self.assertEqual(len(search_resumes_by_name("jane")["items"]), 1)
+        self.assertEqual(len(search_resumes_by_name("SMITH")["items"]), 1)
 
     def test_no_match_returns_empty(self):
-        self.assertEqual(search_resumes_by_name("Zephyr"), [])
+        self.assertEqual(search_resumes_by_name("Zephyr")["items"], [])
 
     def test_result_has_identity_fields(self):
-        results = search_resumes_by_name("Jane")
+        results = search_resumes_by_name("Jane")["items"]
         r = results[0]
         self.assertIn("id", r)
         self.assertIn("first_name", r)
@@ -774,39 +774,39 @@ class TestSearchResumesByName(_ServerFixture):
 
     def test_results_are_serialisable(self):
         import json
-        json.dumps(search_resumes_by_name("Jane"))
+        json.dumps(search_resumes_by_name("Jane")["items"])
 
 
 class TestSearchResumesBySkill(_ServerFixture):
     def test_shared_skill_returns_both(self):
-        results = search_resumes_by_skill("Python")
+        results = search_resumes_by_skill("Python")["items"]
         self.assertGreaterEqual(len(results), 2)
 
     def test_result_has_matched_skills(self):
-        results = search_resumes_by_skill("Python")
+        results = search_resumes_by_skill("Python")["items"]
         for r in results:
             self.assertIn("matched_skills", r)
             self.assertIn("Python", r["matched_skills"])
 
     def test_exclusive_skill_returns_one(self):
-        results = search_resumes_by_skill("Terraform")
+        results = search_resumes_by_skill("Terraform")["items"]
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["first_name"], "John")
 
     def test_no_match_returns_empty(self):
-        self.assertEqual(search_resumes_by_skill("COBOL"), [])
+        self.assertEqual(search_resumes_by_skill("COBOL")["items"], [])
 
     def test_partial_skill_match(self):
-        results = search_resumes_by_skill("kube")
+        results = search_resumes_by_skill("kube")["items"]
         self.assertGreater(len(results), 0)
 
     def test_case_insensitive(self):
-        lower = search_resumes_by_skill("python")
-        upper = search_resumes_by_skill("PYTHON")
+        lower = search_resumes_by_skill("python")["items"]
+        upper = search_resumes_by_skill("PYTHON")["items"]
         self.assertEqual(len(lower), len(upper))
 
     def test_result_has_identity_fields(self):
-        results = search_resumes_by_skill("Python")
+        results = search_resumes_by_skill("Python")["items"]
         for r in results:
             self.assertIn("id", r)
             self.assertIn("first_name", r)
@@ -814,7 +814,7 @@ class TestSearchResumesBySkill(_ServerFixture):
 
     def test_results_are_serialisable(self):
         import json
-        json.dumps(search_resumes_by_skill("Docker"))
+        json.dumps(search_resumes_by_skill("Docker")["items"])
 
 
 # ── Education tools ───────────────────────────────────────────────────────────
@@ -870,62 +870,62 @@ class TestGetEducation(_ServerFixture):
 
 class TestSearchEducation(_ServerFixture):
     def test_by_institution(self):
-        results = search_education("Oregon")
+        results = search_education("Oregon")["items"]
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["institution"], "University of Oregon")
 
     def test_by_degree(self):
-        results = search_education("Computer Engineering")
+        results = search_education("Computer Engineering")["items"]
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["degree"], "BS Computer Engineering")
 
     def test_by_competency(self):
-        results = search_education("Operating Systems")
+        results = search_education("Operating Systems")["items"]
         self.assertEqual(len(results), 2)
 
     def test_resume_id_scope(self):
         jane_id = next(s["id"] for s in list_resume_summaries()["items"] if s["first_name"] == "Jane")
-        results = search_education("Operating Systems", resume_id=jane_id)
+        results = search_education("Operating Systems", resume_id=jane_id)["items"]
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["resume_id"], jane_id)
 
     def test_no_match_returns_empty(self):
-        self.assertEqual(search_education("Nonexistent University"), [])
+        self.assertEqual(search_education("Nonexistent University")["items"], [])
 
     def test_results_include_resume_id(self):
-        results = search_education("Oregon")
+        results = search_education("Oregon")["items"]
         self.assertTrue(all("resume_id" in r for r in results))
 
     def test_results_are_serialisable(self):
         import json
-        json.dumps(search_education("Oregon"))
+        json.dumps(search_education("Oregon")["items"])
 
 
 class TestSearchEducationByCompetency(_ServerFixture):
     def test_match_returns_results(self):
-        results = search_education_by_competency("Algorithms")
+        results = search_education_by_competency("Algorithms")["items"]
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["institution"], "University of Oregon")
         self.assertIn("Algorithms", results[0]["matched_competencies"])
 
     def test_shared_competency_returns_both(self):
-        results = search_education_by_competency("Operating Systems")
+        results = search_education_by_competency("Operating Systems")["items"]
         self.assertEqual(len(results), 2)
 
     def test_partial_match(self):
-        results = search_education_by_competency("operating")
+        results = search_education_by_competency("operating")["items"]
         self.assertEqual(len(results), 2)
 
     def test_no_match_returns_empty(self):
-        self.assertEqual(search_education_by_competency("COBOL"), [])
+        self.assertEqual(search_education_by_competency("COBOL")["items"], [])
 
     def test_results_include_resume_id(self):
-        results = search_education_by_competency("Algorithms")
+        results = search_education_by_competency("Algorithms")["items"]
         self.assertTrue(all("resume_id" in r for r in results))
 
     def test_results_are_serialisable(self):
         import json
-        json.dumps(search_education_by_competency("Algorithms"))
+        json.dumps(search_education_by_competency("Algorithms")["items"])
 
 
 # ── Analytics tools ───────────────────────────────────────────────────────────
@@ -998,53 +998,75 @@ class TestGetSkillFrequency(_ServerFixture):
 
 class TestSearchResumesBySkills(_ServerFixture):
     def test_single_skill_matches_both(self):
-        results = search_resumes_by_skills(["Python"])
+        results = search_resumes_by_skills(["Python"])["items"]
         self.assertGreaterEqual(len(results), 2)
 
     def test_single_skill_same_ids_as_search_resumes_by_skill(self):
-        single = {r["id"] for r in search_resumes_by_skill("Python")}
-        multi = {r["id"] for r in search_resumes_by_skills(["Python"])}
+        single = {r["id"] for r in search_resumes_by_skill("Python")["items"]}
+        multi = {r["id"] for r in search_resumes_by_skills(["Python"])["items"]}
         self.assertEqual(single, multi)
 
     def test_and_mode_returns_subset(self):
-        python_only = {r["id"] for r in search_resumes_by_skills(["Python"])}
-        both = {r["id"] for r in search_resumes_by_skills(["Python", "Terraform"], mode="and")}
+        python_only = {r["id"] for r in search_resumes_by_skills(["Python"])["items"]}
+        both = {r["id"] for r in search_resumes_by_skills(["Python", "Terraform"], mode="and")["items"]}
         self.assertTrue(both.issubset(python_only))
 
     def test_and_mode_exclusive_skill_returns_one(self):
-        results = search_resumes_by_skills(["Python", "Terraform"], mode="and")
+        results = search_resumes_by_skills(["Python", "Terraform"], mode="and")["items"]
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["first_name"], "John")
 
     def test_or_mode_returns_superset_of_and(self):
-        and_ids = {r["id"] for r in search_resumes_by_skills(["Python", "Terraform"], mode="and")}
-        or_ids = {r["id"] for r in search_resumes_by_skills(["Python", "Terraform"], mode="or")}
+        and_ids = {r["id"] for r in search_resumes_by_skills(["Python", "Terraform"], mode="and")["items"]}
+        or_ids = {r["id"] for r in search_resumes_by_skills(["Python", "Terraform"], mode="or")["items"]}
         self.assertTrue(and_ids.issubset(or_ids))
 
     def test_unknown_skill_returns_empty(self):
-        self.assertEqual(search_resumes_by_skills(["COBOL"]), [])
+        self.assertEqual(search_resumes_by_skills(["COBOL"])["items"], [])
 
     def test_and_with_one_unknown_returns_empty(self):
-        self.assertEqual(search_resumes_by_skills(["Python", "COBOL"], mode="and"), [])
+        self.assertEqual(search_resumes_by_skills(["Python", "COBOL"], mode="and")["items"], [])
 
     def test_or_with_one_unknown_returns_match(self):
-        results = search_resumes_by_skills(["Python", "COBOL"], mode="or")
+        results = search_resumes_by_skills(["Python", "COBOL"], mode="or")["items"]
         self.assertGreaterEqual(len(results), 2)
 
     def test_case_insensitive(self):
-        lower = search_resumes_by_skills(["python"])
-        upper = search_resumes_by_skills(["Python"])
+        lower = search_resumes_by_skills(["python"])["items"]
+        upper = search_resumes_by_skills(["Python"])["items"]
         self.assertEqual({r["id"] for r in lower}, {r["id"] for r in upper})
 
     def test_each_result_has_matched_skills(self):
-        for r in search_resumes_by_skills(["Python"]):
+        for r in search_resumes_by_skills(["Python"])["items"]:
             self.assertIn("matched_skills", r)
             self.assertIsInstance(r["matched_skills"], list)
             self.assertIn("Python", r["matched_skills"])
 
     def test_result_is_serialisable(self):
         import json
-        json.dumps(search_resumes_by_skills(["Python", "Docker"]))
+        json.dumps(search_resumes_by_skills(["Python", "Docker"])["items"])
+
+
+# ── regex search mode ──────────────────────────────────────────────────────────
+
+
+class TestRegexSearchMode(_ServerFixture):
+    def test_search_skills_regex_alternation(self):
+        results = search_skills(r"kubernetes|terraform", mode="regex")["items"]
+        titles = {r["title"].lower() for r in results}
+        self.assertTrue(titles & {"kubernetes", "terraform"})
+
+    def test_search_skills_invalid_regex_returns_error(self):
+        result = search_skills("(", mode="regex")
+        self.assertIn("error", result)
+
+    def test_search_resumes_invalid_regex_returns_error(self):
+        result = search_resumes("(", mode="regex")
+        self.assertIn("error", result)
+
+    def test_search_resumes_regex_mode_matches(self):
+        result = search_resumes(r"K[a-z]+netes", mode="regex")
+        self.assertGreater(result["total_count"], 0)
 
 
 # ── ReloadHandler unit tests ──────────────────────────────────────────────────

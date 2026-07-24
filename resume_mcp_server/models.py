@@ -197,3 +197,20 @@ class SkillFrequencyItem(BaseModel):
 class PaginatedResponse(BaseModel):
     total_count: int
     items: list[Any]
+    has_more: bool
+    next_offset: int | None = None
+    message: str
+
+    @classmethod
+    def paginate(cls, all_items: list[Any], offset: int, limit: int) -> "PaginatedResponse":
+        total = len(all_items)
+        page = all_items[offset:offset + limit]
+        shown = offset + len(page)
+        has_more = shown < total
+        next_offset = shown if has_more else None
+        message = (
+            f"{shown} of {total} results shown. Call again with offset={next_offset} to see more."
+            if has_more else
+            f"All {total} results shown."
+        )
+        return cls(total_count=total, items=page, has_more=has_more, next_offset=next_offset, message=message)

@@ -257,28 +257,39 @@ Types are inferred from filenames:
 
 ## Search behavior
 
-All `search_*` tools split the query on whitespace and support two token match modes via the optional `mode` parameter:
+Most `search_*` tools split the query on whitespace and support three match modes via the optional `mode` parameter:
 
 | `mode` | Behavior |
 |---|---|
 | `"and"` *(default)* | All tokens must appear within the same field. `"latency throughput"` only matches a description that contains both words. |
 | `"or"` | Any token is sufficient. `"latency throughput"` matches a description that contains either word. |
+| `"regex"` | The query is compiled as-is (not tokenized or escaped) into a case-insensitive regular expression and matched against the field. Use this for grep-style power — alternation, wildcards, anchors, etc., e.g. `"eng(ineer)?"` or `"aws|gcp|azure"`. An invalid pattern returns `{"error": "..."}` instead of raising. |
 
-**Multi-field note:** For tools that search several fields (company name, position title, achievement text, etc.), AND mode requires all tokens to co-occur in the *same* field, not spread across fields. Use OR mode when you want a looser cross-field match.
+**Multi-field note:** For tools that search several fields (company name, position title, achievement text, etc.), AND mode requires all tokens to co-occur in the *same* field, not spread across fields. Use OR mode when you want a looser cross-field match. Regex mode also matches per-field.
 
-**Single-word queries** behave identically in both modes.
+**Single-word queries** behave identically in `and`/`or` mode.
+
+`search_resumes` isn't tokenized (it's a whole-document keyword search), so its `mode` only accepts `"literal"` *(default)* or `"regex"`.
+
+`search_resumes_by_skills` does not support `"regex"` — its `mode` already means something different (AND/OR *across* the list of skill queries, not within one query's tokens).
 
 ---
 
 ## Pagination
 
-All `list_*` tools accept `limit` (default `100`) and `offset` (default `0`) parameters and return a consistent envelope:
+All `list_*` and `search_*` tools accept `limit` (default `100`) and `offset` (default `0`) parameters and return a consistent envelope:
 
 ```json
-{"total_count": 247, "items": [...]}
+{
+  "total_count": 247,
+  "items": [...],
+  "has_more": true,
+  "next_offset": 100,
+  "message": "100 of 247 results shown. Call again with offset=100 to see more."
+}
 ```
 
-`total_count` is the full collection size before slicing. To check whether more pages exist: `offset + len(items) < total_count`.
+`total_count` is the full match count before slicing. `has_more` and `next_offset` tell you directly whether to page further — no need to compute `offset + len(items) < total_count` yourself — and `message` restates that in plain language, ready to act on. When there's nothing left, `has_more` is `false`, `next_offset` is `null`, and `message` reads `"All N results shown."`.
 
 ---
 
@@ -339,6 +350,11 @@ Full-text search across all documents (case-insensitive), sorted by match count.
 |---|---|---|
 | `query` | string | Text to search for |
 | `doc_type` | string (optional) | Filter by type (same values as `list_resumes`) |
+| `mode` | string (optional) | `"literal"` *(default)* or `"regex"` — see [Search behavior](#search-behavior) |
+| `limit` | integer (optional) | Maximum number of results (default `100`) |
+| `offset` | integer (optional) | Number of results to skip (default `0`) |
+
+Returns: paginated envelope — `total_count` + `items`, where each item has `path`, `filename`, `doc_type`, `match_count`, `snippet`.
 
 ---
 
@@ -349,9 +365,11 @@ Find resumes by person name (first or last name). Returns minimal identity field
 | Parameter | Type | Description |
 |---|---|---|
 | `query` | string | Name fragment to search for (case-insensitive, partial match) |
-| `mode` | string (optional) | `"and"` *(default)* or `"or"` — see [Search behavior](#search-behavior) |
+| `mode` | string (optional) | `"and"` *(default)*, `"or"`, or `"regex"` — see [Search behavior](#search-behavior) |
+| `limit` | integer (optional) | Maximum number of results (default `100`) |
+| `offset` | integer (optional) | Number of results to skip (default `0`) |
 
-Returns: `id`, `first_name`, `last_name`, `email`, `phone_num`.
+Returns: paginated envelope — `total_count` + `items`, where each item has `id`, `first_name`, `last_name`, `email`, `phone_num`.
 
 ---
 
@@ -362,9 +380,11 @@ Find which resumes list a given badge skill. Returns resume identity and matched
 | Parameter | Type | Description |
 |---|---|---|
 | `skill` | string | Skill title fragment to search for (case-insensitive, partial match) |
-| `mode` | string (optional) | `"and"` *(default)* or `"or"` — see [Search behavior](#search-behavior) |
+| `mode` | string (optional) | `"and"` *(default)*, `"or"`, or `"regex"` — see [Search behavior](#search-behavior) |
+| `limit` | integer (optional) | Maximum number of results (default `100`) |
+| `offset` | integer (optional) | Number of results to skip (default `0`) |
 
-Returns: `id`, `first_name`, `last_name`, `matched_skills`.
+Returns: paginated envelope — `total_count` + `items`, where each item has `id`, `first_name`, `last_name`, `matched_skills`.
 
 ---
 
@@ -375,7 +395,11 @@ Search badge skills (technologies, tools, languages) by title.
 | Parameter | Type | Description |
 |---|---|---|
 | `query` | string | Text to search for in skill titles (case-insensitive) |
-| `mode` | string (optional) | `"and"` *(default)* or `"or"` — see [Search behavior](#search-behavior) |
+| `mode` | string (optional) | `"and"` *(default)*, `"or"`, or `"regex"` — see [Search behavior](#search-behavior) |
+| `limit` | integer (optional) | Maximum number of results (default `100`) |
+| `offset` | integer (optional) | Number of results to skip (default `0`) |
+
+Returns: paginated envelope — `total_count` + `items`.
 
 ---
 
@@ -387,7 +411,11 @@ Each result includes a `resume_id` field identifying which resume the entry belo
 | Parameter | Type | Description |
 |---|---|---|
 | `query` | string | Text to search for (case-insensitive) |
-| `mode` | string (optional) | `"and"` *(default)* or `"or"` — see [Search behavior](#search-behavior) |
+| `mode` | string (optional) | `"and"` *(default)*, `"or"`, or `"regex"` — see [Search behavior](#search-behavior) |
+| `limit` | integer (optional) | Maximum number of results (default `100`) |
+| `offset` | integer (optional) | Number of results to skip (default `0`) |
+
+Returns: paginated envelope — `total_count` + `items`.
 
 ---
 
@@ -448,9 +476,11 @@ Search achievement descriptions directly, returning only matching bullets with m
 |---|---|---|
 | `query` | string | Text to search for in achievement descriptions (case-insensitive) |
 | `resume_id` | string (optional) | Resume ID to scope the search to one resume |
-| `mode` | string (optional) | `"and"` *(default)* or `"or"` — see [Search behavior](#search-behavior) |
+| `mode` | string (optional) | `"and"` *(default)*, `"or"`, or `"regex"` — see [Search behavior](#search-behavior) |
+| `limit` | integer (optional) | Maximum number of results (default `100`) |
+| `offset` | integer (optional) | Number of results to skip (default `0`) |
 
-Returns: `id`, `desc`, `company_name`, `position_title`, `work_experience_id`, `resume_id`.
+Returns: paginated envelope — `total_count` + `items`, where each item has `id`, `desc`, `company_name`, `position_title`, `work_experience_id`, `resume_id`.
 
 ---
 
@@ -511,7 +541,11 @@ Each result includes a `resume_id` field identifying which resume the project be
 |---|---|---|
 | `query` | string | Text to search for (case-insensitive) |
 | `resume_id` | string (optional) | Resume ID to scope the search to one resume |
-| `mode` | string (optional) | `"and"` *(default)* or `"or"` — see [Search behavior](#search-behavior) |
+| `mode` | string (optional) | `"and"` *(default)*, `"or"`, or `"regex"` — see [Search behavior](#search-behavior) |
+| `limit` | integer (optional) | Maximum number of results (default `100`) |
+| `offset` | integer (optional) | Number of results to skip (default `0`) |
+
+Returns: paginated envelope — `total_count` + `items`.
 
 ---
 
@@ -522,9 +556,11 @@ Find side projects that demonstrate competency with a given technology.
 | Parameter | Type | Description |
 |---|---|---|
 | `technology` | string | Technology/skill name fragment to search for (case-insensitive, partial match) |
-| `mode` | string (optional) | `"and"` *(default)* or `"or"` — see [Search behavior](#search-behavior) |
+| `mode` | string (optional) | `"and"` *(default)*, `"or"`, or `"regex"` — see [Search behavior](#search-behavior) |
+| `limit` | integer (optional) | Maximum number of results (default `100`) |
+| `offset` | integer (optional) | Number of results to skip (default `0`) |
 
-Returns: `id`, `name`, `description`, `matched_technologies`, `resume_id`.
+Returns: paginated envelope — `total_count` + `items`, where each item has `id`, `name`, `description`, `matched_technologies`, `resume_id`.
 
 ---
 
@@ -560,7 +596,11 @@ Search education entries by institution, degree, or competency. Each result incl
 |---|---|---|
 | `query` | string | Text to search for (case-insensitive) |
 | `resume_id` | string (optional) | Resume ID to scope the search to one resume |
-| `mode` | string (optional) | `"and"` *(default)* or `"or"` — see [Search behavior](#search-behavior) |
+| `mode` | string (optional) | `"and"` *(default)*, `"or"`, or `"regex"` — see [Search behavior](#search-behavior) |
+| `limit` | integer (optional) | Maximum number of results (default `100`) |
+| `offset` | integer (optional) | Number of results to skip (default `0`) |
+
+Returns: paginated envelope — `total_count` + `items`.
 
 ---
 
@@ -568,12 +608,14 @@ Search education entries by institution, degree, or competency. Each result incl
 
 Find education entries that demonstrate competency with a given skill — useful for matching a candidate's coursework/training to a specific position's requirements.
 
-Returns: `id`, `institution`, `degree`, `year`, `matched_competencies`, `resume_id`.
-
 | Parameter | Type | Description |
 |---|---|---|
 | `competency` | string | Skill/competency name fragment to search for (case-insensitive, partial match) |
-| `mode` | string (optional) | `"and"` *(default)* or `"or"` — see [Search behavior](#search-behavior) |
+| `mode` | string (optional) | `"and"` *(default)*, `"or"`, or `"regex"` — see [Search behavior](#search-behavior) |
+| `limit` | integer (optional) | Maximum number of results (default `100`) |
+| `offset` | integer (optional) | Number of results to skip (default `0`) |
+
+Returns: paginated envelope — `total_count` + `items`, where each item has `id`, `institution`, `degree`, `year`, `matched_competencies`, `resume_id`.
 
 ---
 
@@ -606,6 +648,8 @@ Find resumes that have specific skills. Uses the same partial token matching as 
 | Parameter | Type | Description |
 |---|---|---|
 | `skills` | list of strings | Skill title fragments to filter by, e.g. `["Python", "Docker"]` |
-| `mode` | string (optional) | `"and"` *(default)* — resume must have a match for **every** query; `"or"` — resume must have a match for **any** query |
+| `mode` | string (optional) | `"and"` *(default)* — resume must have a match for **every** query; `"or"` — resume must have a match for **any** query. `"regex"` is not supported here (see [Search behavior](#search-behavior)) |
+| `limit` | integer (optional) | Maximum number of results (default `100`) |
+| `offset` | integer (optional) | Number of results to skip (default `0`) |
 
-Returns: `id`, `first_name`, `last_name`, `matched_skills`.
+Returns: paginated envelope — `total_count` + `items`, where each item has `id`, `first_name`, `last_name`, `matched_skills`.

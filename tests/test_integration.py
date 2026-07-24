@@ -101,21 +101,21 @@ class TestIntegration(unittest.TestCase):
         self.assertGreater(len(text), 100)
 
     def test_search_resumes_full_text_match(self):
-        results = self.collection.search("Kubernetes")
+        results = self.collection.search("Kubernetes").items
         self.assertGreater(len(results), 0)
-        paths = {r.path for r in results}
+        paths = {r["path"] for r in results}
         # Only john_resume.txt mentions Kubernetes
         self.assertTrue(any("john" in p for p in paths))
 
     def test_search_resumes_no_match(self):
-        results = self.collection.search("xyzzy_impossible_term_9999")
+        results = self.collection.search("xyzzy_impossible_term_9999").items
         self.assertEqual(results, [])
 
     def test_search_resumes_doc_type_filter(self):
-        all_results = self.collection.search("Python")
-        resume_results = self.collection.search("Python", doc_type="resume")
+        all_results = self.collection.search("Python").items
+        resume_results = self.collection.search("Python", doc_type="resume").items
         self.assertLessEqual(len(resume_results), len(all_results))
-        self.assertTrue(all(r.doc_type == "resume" for r in resume_results))
+        self.assertTrue(all(r["doc_type"] == "resume" for r in resume_results))
 
     # ── List tools (repo) ─────────────────────────────────────────────────────
 
@@ -230,66 +230,66 @@ class TestIntegration(unittest.TestCase):
     # ── Search tools (repo) ───────────────────────────────────────────────────
 
     def test_search_resumes_by_name_first_name(self):
-        results = self.repo.search_resumes_by_name("Jane")
+        results = self.repo.search_resumes_by_name("Jane").items
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["first_name"], "Jane")
 
     def test_search_resumes_by_name_partial(self):
-        results = self.repo.search_resumes_by_name("Jo")
+        results = self.repo.search_resumes_by_name("Jo").items
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["first_name"], "John")
 
     def test_search_resumes_by_name_case_insensitive(self):
-        self.assertEqual(len(self.repo.search_resumes_by_name("jane")), 1)
-        self.assertEqual(len(self.repo.search_resumes_by_name("SMITH")), 1)
+        self.assertEqual(len(self.repo.search_resumes_by_name("jane").items), 1)
+        self.assertEqual(len(self.repo.search_resumes_by_name("SMITH").items), 1)
 
     def test_search_resumes_by_name_no_match(self):
-        self.assertEqual(self.repo.search_resumes_by_name("Zephyr"), [])
+        self.assertEqual(self.repo.search_resumes_by_name("Zephyr").items, [])
 
     def test_search_resumes_by_skill_returns_match(self):
-        results = self.repo.search_resumes_by_skill("Python")
+        results = self.repo.search_resumes_by_skill("Python").items
         self.assertGreaterEqual(len(results), 2)
         for r in results:
             self.assertIn("Python", r["matched_skills"])
 
     def test_search_resumes_by_skill_exclusive(self):
-        results = self.repo.search_resumes_by_skill("Terraform")
+        results = self.repo.search_resumes_by_skill("Terraform").items
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["first_name"], "John")
 
     def test_search_resumes_by_skill_no_match(self):
-        self.assertEqual(self.repo.search_resumes_by_skill("COBOL"), [])
+        self.assertEqual(self.repo.search_resumes_by_skill("COBOL").items, [])
 
     def test_search_skills_partial_match(self):
-        results = self.repo.search_badge_skills("kube")
+        results = self.repo.search_badge_skills("kube").items
         self.assertEqual(len(results), 1)
-        self.assertEqual(results[0].title, "Kubernetes")
+        self.assertEqual(results[0]["title"], "Kubernetes")
 
     def test_search_skills_case_insensitive(self):
-        results = self.repo.search_badge_skills("PYTHON")
+        results = self.repo.search_badge_skills("PYTHON").items
         self.assertEqual(len(results), 1)
 
     def test_search_work_experiences_by_company(self):
-        results = self.repo.search_work_experiences("Acme")
+        results = self.repo.search_work_experiences("Acme").items
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["company_name"], "Acme Corp")
 
     def test_search_work_experiences_by_position(self):
-        results = self.repo.search_work_experiences("DevOps")
+        results = self.repo.search_work_experiences("DevOps").items
         self.assertGreater(len(results), 0)
         self.assertTrue(any(r["position_title"] == "DevOps Engineer" for r in results))
 
     def test_search_work_experiences_includes_resume_id(self):
-        results = self.repo.search_work_experiences("Engineer")
+        results = self.repo.search_work_experiences("Engineer").items
         self.assertTrue(all("resume_id" in r for r in results))
 
     def test_search_achievements_returns_match(self):
-        results = self.repo.search_achievements("pipeline")
+        results = self.repo.search_achievements("pipeline").items
         self.assertGreater(len(results), 0)
         self.assertTrue(all("pipeline" in r["desc"].lower() for r in results))
 
     def test_search_achievements_includes_parent_context(self):
-        results = self.repo.search_achievements("pipeline")
+        results = self.repo.search_achievements("pipeline").items
         for r in results:
             self.assertIn("company_name", r)
             self.assertIn("position_title", r)
@@ -299,15 +299,15 @@ class TestIntegration(unittest.TestCase):
     def test_search_achievements_scoped_by_resume_id(self):
         summaries = self.repo.list_resume_summaries()
         jane_id = next(s["id"] for s in summaries.items if s["first_name"] == "Jane")
-        results = self.repo.search_achievements("engineers", resume_id=jane_id)
+        results = self.repo.search_achievements("engineers", resume_id=jane_id).items
         self.assertTrue(all(r["resume_id"] == jane_id for r in results))
 
     def test_search_achievements_no_match(self):
-        self.assertEqual(self.repo.search_achievements("xyzzy_impossible_9999"), [])
+        self.assertEqual(self.repo.search_achievements("xyzzy_impossible_9999").items, [])
 
     def test_search_achievements_case_insensitive(self):
-        r_lower = self.repo.search_achievements("pipeline")
-        r_upper = self.repo.search_achievements("PIPELINE")
+        r_lower = self.repo.search_achievements("pipeline").items
+        r_upper = self.repo.search_achievements("PIPELINE").items
         self.assertEqual(len(r_lower), len(r_upper))
 
 

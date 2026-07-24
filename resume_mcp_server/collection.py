@@ -9,6 +9,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 from .extractor import extract_text
+from .models import PaginatedResponse
 from .parser import parse_resume
 from .repository import ResumeRepository
 
@@ -33,15 +34,6 @@ class ResumeMetadata:
     doc_type: str
     modified: str
     size_bytes: int
-
-
-@dataclass
-class SearchResult:
-    path: str
-    filename: str
-    doc_type: str
-    snippet: str
-    match_count: int
 
 
 @dataclass
@@ -94,9 +86,16 @@ class ResumeCollection:
             raise KeyError(f"Document not found: {path!r}")
         return self._index[path][1]
 
-    def search(self, query: str, doc_type: str | None = None) -> list[SearchResult]:
-        pattern = re.compile(re.escape(query), re.IGNORECASE)
-        results: list[SearchResult] = []
+    def search(self, query: str, doc_type: str | None = None, mode: str = "literal",
+               limit: int = 100, offset: int = 0) -> PaginatedResponse:
+        if mode.lower() == "regex":
+            try:
+                pattern = re.compile(query, re.IGNORECASE)
+            except re.error as e:
+                raise ValueError(f"Invalid regex pattern {query!r}: {e}") from e
+        else:
+            pattern = re.compile(re.escape(query), re.IGNORECASE)
+        results: list[dict] = []
         for rel, (meta, text) in self._index.items():
             if doc_type and meta.doc_type != doc_type:
                 continue
@@ -108,11 +107,12 @@ class ResumeCollection:
             start = max(0, m.start() - 100)
             end = min(len(text), m.end() + 100)
             snippet = text[start:end].strip()
-            results.append(SearchResult(
-                path=rel,
-                filename=meta.filename,
-                doc_type=meta.doc_type,
-                snippet=snippet,
-                match_count=match_count,
-            ))
-        return sorted(results, key=lambda r: r.match_count, reverse=True)
+            results.append({
+                "path": rel,
+                "filename": meta.filename,
+                "doc_type": meta.doc_type,
+                "snippet": snippet,
+                "match_count": match_count,
+            })
+        results.sort(key=lambda r: r["match_count"], reverse=True)
+        return PaginatedResponse.paginate(results, offset, limit)
