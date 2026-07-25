@@ -19,7 +19,7 @@ The server parses each document into structured data (contact info, work history
 
 - **Multi-format parsing** — `.docx`, `.pdf`, `.md`, and `.txt` documents are parsed into structured data: contact info, work history, education, skills, and side projects.
 - **Automatic hot-reload** — a filesystem watcher re-indexes your documents as soon as they change, no server restart needed.
-- **Document type inference** — files are automatically classified as `resume`, `cover_letter`, `application_material`, or `other` based on filename patterns.
+- **Document type inference** — files are automatically classified as `resume`, `cover_letter`, `application_material`, or `other` based on filename patterns, which can be overridden per category via environment variables.
 - **Full-text and structured search** — search whole documents with `search_resumes`, or filter any entity type (skills, work experience, achievements, side projects, education) with a scoped `query`, `technology`, or `competency` parameter.
 - **Three search modes** — `and`, `or`, and `regex` matching, available consistently on every tool that accepts a query-like parameter.
 - **Uniform pagination** — every list-style tool returns the same `total_count` / `items` / `has_more` / `next_offset` / `message` envelope, with validated `limit`/`offset` and a 200-item cap.
@@ -254,8 +254,13 @@ claude mcp add resume-mcp-server resume-mcp-server -e RESUME_DIR=/path/to/your/r
 | `FASTMCP_TRANSPORT` | `http` (local) / `stdio` (Docker image) | Transport protocol (`http` or `stdio`) |
 | `FASTMCP_HOST` | `0.0.0.0` | Bind address |
 | `FASTMCP_PORT` | `8001` | Port the HTTP server listens on |
+| `DOC_TYPE_PATTERN_RESUME` | `resume` | Regex used to classify a filename as `resume` |
+| `DOC_TYPE_PATTERN_COVER_LETTER` | `cover.?letter\|_cl\.\|_cl_\|coverletter` | Regex used to classify a filename as `cover_letter` |
+| `DOC_TYPE_PATTERN_APPLICATION_MATERIAL` | `interview\|study.?guide\|why_\|application.?question\|job.?desc` | Regex used to classify a filename as `application_material` |
 
 A `.env` file in the working directory is loaded automatically on startup if present. Shell environment variables and values set by the MCP client always take precedence over `.env` values.
+
+Each `DOC_TYPE_PATTERN_*` variable replaces the default regex for that category (filenames are matched in order: resume, then cover letter, then application material, then everything else falls back to `other`). Leave a variable unset to keep its default; an invalid regex is ignored and the default is used instead.
 
 The server scans `RESUME_DIR` recursively on startup and reloads automatically when files change.
 
@@ -269,6 +274,8 @@ Types are inferred from filenames:
 | `cover_letter` | `cover letter`, `_cl.`, `coverletter` |
 | `application_material` | `interview`, `study guide`, `why_`, `application question`, `job desc` |
 | `other` | everything else |
+
+Each of the three regexes can be overridden with `DOC_TYPE_PATTERN_RESUME`, `DOC_TYPE_PATTERN_COVER_LETTER`, and `DOC_TYPE_PATTERN_APPLICATION_MATERIAL` — see [Configuration](#configuration).
 
 ---
 

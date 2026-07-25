@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -15,15 +16,33 @@ from .repository import ResumeRepository
 
 SUPPORTED_EXTENSIONS = {".docx", ".pdf", ".md", ".txt"}
 
+_DEFAULT_PATTERNS: dict[str, str] = {
+    "resume": r"resume",
+    "cover_letter": r"cover.?letter|_cl\.|_cl_|coverletter",
+    "application_material": r"interview|study.?guide|why_|application.?question|job.?desc",
+}
+
+_PATTERN_ENV_VARS: dict[str, str] = {
+    "resume": "DOC_TYPE_PATTERN_RESUME",
+    "cover_letter": "DOC_TYPE_PATTERN_COVER_LETTER",
+    "application_material": "DOC_TYPE_PATTERN_APPLICATION_MATERIAL",
+}
+
 
 def _infer_doc_type(filename: str) -> str:
     name = filename.lower()
-    if re.search(r"resume", name):
-        return "resume"
-    if re.search(r"cover.?letter|_cl\.|_cl_|coverletter", name):
-        return "cover_letter"
-    if re.search(r"interview|study.?guide|why_|application.?question|job.?desc", name):
-        return "application_material"
+    for doc_type, env_var in _PATTERN_ENV_VARS.items():
+        pattern = os.environ.get(env_var) or _DEFAULT_PATTERNS[doc_type]
+        try:
+            if re.search(pattern, name):
+                return doc_type
+        except re.error as exc:
+            logger.warning(
+                "Invalid regex in %s=%r (%s); falling back to default pattern",
+                env_var, pattern, exc,
+            )
+            if re.search(_DEFAULT_PATTERNS[doc_type], name):
+                return doc_type
     return "other"
 
 

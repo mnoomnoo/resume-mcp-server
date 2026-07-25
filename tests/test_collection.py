@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from resume_mcp_server.collection import ResumeCollection, _infer_doc_type
 
@@ -80,6 +82,47 @@ class TestDocTypeInference(unittest.TestCase):
         self.assertEqual(_infer_doc_type("random_notes.txt"), "other")
         self.assertEqual(_infer_doc_type("portfolio.pdf"), "other")
         self.assertEqual(_infer_doc_type("references.docx"), "other")
+
+
+class TestDocTypeInferenceEnvOverrides(unittest.TestCase):
+    def test_custom_pattern_overrides_default(self):
+        with patch.dict(os.environ, {"DOC_TYPE_PATTERN_RESUME": "lebenslauf"}):
+            self.assertEqual(_infer_doc_type("lebenslauf_jane.docx"), "resume")
+            self.assertEqual(_infer_doc_type("jane_resume.docx"), "other")
+
+    def test_custom_cover_letter_pattern(self):
+        with patch.dict(os.environ, {"DOC_TYPE_PATTERN_COVER_LETTER": "anschreiben"}):
+            self.assertEqual(_infer_doc_type("jane_anschreiben.docx"), "cover_letter")
+
+    def test_custom_application_material_pattern(self):
+        with patch.dict(os.environ, {"DOC_TYPE_PATTERN_APPLICATION_MATERIAL": "bewerbung"}):
+            self.assertEqual(_infer_doc_type("acme_bewerbung.txt"), "application_material")
+
+    def test_unset_env_vars_use_default_behavior(self):
+        self.assertEqual(_infer_doc_type("jane_doe_resume.docx"), "resume")
+        self.assertEqual(_infer_doc_type("jane_cover_letter.docx"), "cover_letter")
+        self.assertEqual(_infer_doc_type("why_acme.docx"), "application_material")
+        self.assertEqual(_infer_doc_type("random_notes.txt"), "other")
+
+    def test_invalid_regex_falls_back_to_default(self):
+        with patch.dict(os.environ, {"DOC_TYPE_PATTERN_RESUME": "resume("}):
+            self.assertEqual(_infer_doc_type("jane_resume.docx"), "resume")
+            self.assertEqual(_infer_doc_type("random_notes.txt"), "other")
+
+
+class TestCollectionLoadWithEnvOverride(unittest.TestCase):
+    """Confirms DOC_TYPE_PATTERN_* env vars flow through ResumeCollection.load()."""
+
+    def test_load_respects_application_material_override(self):
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            (tmp / "acme_bewerbung.txt").write_text("Bewerbung fuer Acme Corp.")
+            with patch.dict(os.environ, {"DOC_TYPE_PATTERN_APPLICATION_MATERIAL": "bewerbung"}):
+                collection = ResumeCollection(tmp)
+                collection.load()
+            items = collection.list_all(doc_type="application_material")
+            self.assertEqual(len(items), 1)
+            self.assertEqual(items[0].filename, "acme_bewerbung.txt")
 
 
 # ── collection loading with empty directory ───────────────────────────────────
