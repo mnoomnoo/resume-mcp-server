@@ -107,7 +107,7 @@ class TestCollectionLoadEmptyDir(unittest.TestCase):
         self.assertEqual(self.collection.list_all(doc_type="resume"), [])
 
     def test_search_returns_empty(self):
-        self.assertEqual(self.collection.search("anything"), [])
+        self.assertEqual(self.collection.search("anything").items, [])
 
     def test_get_text_raises_key_error(self):
         with self.assertRaises(KeyError):
@@ -156,23 +156,23 @@ class TestCollectionLoadSampleDir(unittest.TestCase):
             self.collection.get_text("nonexistent/file.md")
 
     def test_full_text_search_returns_result(self):
-        results = self.collection.search("Engineer")
+        results = self.collection.search("Engineer").items
         self.assertGreater(len(results), 0)
 
     def test_full_text_search_no_match_returns_empty(self):
-        results = self.collection.search("xyzzy_no_such_term_12345")
+        results = self.collection.search("xyzzy_no_such_term_12345").items
         self.assertEqual(results, [])
 
     def test_search_result_has_snippet(self):
-        results = self.collection.search("Engineer")
+        results = self.collection.search("Engineer").items
         for r in results:
-            self.assertIsInstance(r.snippet, str)
-            self.assertGreater(len(r.snippet), 0)
+            self.assertIsInstance(r["snippet"], str)
+            self.assertGreater(len(r["snippet"]), 0)
 
     def test_search_result_has_match_count(self):
-        results = self.collection.search("Engineer")
+        results = self.collection.search("Engineer").items
         for r in results:
-            self.assertGreater(r.match_count, 0)
+            self.assertGreater(r["match_count"], 0)
 
     def test_reload_is_idempotent(self):
         count_first = self.collection.load()
@@ -255,17 +255,17 @@ class TestCollectionLoadPlainText(unittest.TestCase):
         self.assertIn("Python", titles)
 
     def test_search_text_across_cover_letter(self):
-        results = self.collection.search("Acme Corp")
-        paths = {r.path for r in results}
+        results = self.collection.search("Acme Corp").items
+        paths = {r["path"] for r in results}
         # cover_letter.txt also mentions Acme Corp
         self.assertTrue(any("cover_letter" in p for p in paths))
 
     def test_search_filtered_to_doc_type(self):
         # "Acme Corp" appears in both a resume and the cover letter
-        all_results = self.collection.search("Acme Corp")
-        resume_only = self.collection.search("Acme Corp", doc_type="resume")
+        all_results = self.collection.search("Acme Corp").items
+        resume_only = self.collection.search("Acme Corp", doc_type="resume").items
         self.assertLessEqual(len(resume_only), len(all_results))
-        self.assertTrue(all(r.doc_type == "resume" for r in resume_only))
+        self.assertTrue(all(r["doc_type"] == "resume" for r in resume_only))
 
     def test_non_resume_files_not_parsed_into_repo(self):
         # cover_letter.txt should appear in the index but NOT be added to repo

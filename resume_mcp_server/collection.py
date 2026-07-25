@@ -9,6 +9,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 from .extractor import extract_text
+from .models import PaginatedResponse
 from .parser import parse_resume
 from .repository import ResumeRepository
 
@@ -33,15 +34,6 @@ class ResumeMetadata:
     doc_type: str
     modified: str
     size_bytes: int
-
-
-@dataclass
-class SearchResult:
-    path: str
-    filename: str
-    doc_type: str
-    snippet: str
-    match_count: int
 
 
 @dataclass
@@ -94,25 +86,40 @@ class ResumeCollection:
             raise KeyError(f"Document not found: {path!r}")
         return self._index[path][1]
 
-    def search(self, query: str, doc_type: str | None = None) -> list[SearchResult]:
-        pattern = re.compile(re.escape(query), re.IGNORECASE)
-        results: list[SearchResult] = []
+    def search(self, query: str, doc_type: str | None = None, mode: str = "and",
+               limit: int = 100, offset: int = 0) -> PaginatedResponse:
+        mode = mode.lower()
+        if mode == "regex":
+            try:
+                patterns = [re.compile(query, re.IGNORECASE)]
+            except re.error as e:
+                raise ValueError(f"Invalid regex pattern {query!r}: {e}") from e
+            require_all = True
+        else:
+            tokens = query.split() or [query]
+            patterns = [re.compile(re.escape(t), re.IGNORECASE) for t in tokens]
+            require_all = mode != "or"
+        results: list[dict] = []
         for rel, (meta, text) in self._index.items():
             if doc_type and meta.doc_type != doc_type:
                 continue
-            it = pattern.finditer(text)
-            m = next(it, None)
-            if m is None:
+            per_pattern_matches = [list(p.finditer(text)) for p in patterns]
+            hit_flags = [len(matches) > 0 for matches in per_pattern_matches]
+            hit = all(hit_flags) if require_all else any(hit_flags)
+            if not hit:
                 continue
-            match_count = 1 + sum(1 for _ in it)
-            start = max(0, m.start() - 100)
-            end = min(len(text), m.end() + 100)
+            match_count = sum(len(matches) for matches in per_pattern_matches)
+            # snippet is built around the first match of the first token that matched
+            first_match = next(matches[0] for matches in per_pattern_matches if matches)
+            start = max(0, first_match.start() - 100)
+            end = min(len(text), first_match.end() + 100)
             snippet = text[start:end].strip()
-            results.append(SearchResult(
-                path=rel,
-                filename=meta.filename,
-                doc_type=meta.doc_type,
-                snippet=snippet,
-                match_count=match_count,
-            ))
-        return sorted(results, key=lambda r: r.match_count, reverse=True)
+            results.append({
+                "path": rel,
+                "filename": meta.filename,
+                "doc_type": meta.doc_type,
+                "snippet": snippet,
+                "match_count": match_count,
+            })
+        results.sort(key=lambda r: r["match_count"], reverse=True)
+        return PaginatedResponse.paginate(results, offset, limit)
