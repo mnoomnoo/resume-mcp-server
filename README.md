@@ -19,7 +19,7 @@ The server parses each document into structured data (contact info, work history
 
 - **Multi-format parsing** — `.docx`, `.pdf`, `.md`, and `.txt` documents are parsed into structured data: contact info, work history, education, skills, and side projects.
 - **Automatic hot-reload** — a filesystem watcher re-indexes your documents as soon as they change, no server restart needed.
-- **Document type inference** — files are automatically classified as `resume`, `cover_letter`, `application_material`, or `other` based on filename patterns.
+- **Document type inference** — files are automatically classified as `resume`, `cover_letter`, `application_material`, or `other` based on filename patterns, which can be overridden per category via environment variables.
 - **Full-text and structured search** — search whole documents with `search_resumes`, or filter any entity type (skills, work experience, achievements, side projects, education) with a scoped `query`, `technology`, or `competency` parameter.
 - **Three search modes** — `and`, `or`, and `regex` matching, available consistently on every tool that accepts a query-like parameter.
 - **Uniform pagination** — every list-style tool returns the same `total_count` / `items` / `has_more` / `next_offset` / `message` envelope, with validated `limit`/`offset` and a 200-item cap.
@@ -274,6 +274,8 @@ Types are inferred from filenames:
 | `cover_letter` | `cover letter`, `_cl.`, `coverletter` |
 | `application_material` | `interview`, `study guide`, `why_`, `application question`, `job desc` |
 | `other` | everything else |
+
+Each of the three regexes can be overridden with `DOC_TYPE_PATTERN_RESUME`, `DOC_TYPE_PATTERN_COVER_LETTER`, and `DOC_TYPE_PATTERN_APPLICATION_MATERIAL` — see [Configuration](#configuration).
 
 ---
 
