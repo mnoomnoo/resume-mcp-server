@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import resume_mcp_server.server as _srv
 from resume_mcp_server.collection import ResumeCollection
@@ -1331,6 +1332,21 @@ class TestReloadHandler(unittest.TestCase):
             dest_path = "b.zip"
             is_directory = False
         self.handler.on_moved(_MovedEv())
+        self.assertIsNone(self.handler._timer)
+
+    def test_reload_calls_collection_load_and_clears_timer(self):
+        mock_collection = MagicMock()
+        mock_collection.load.return_value = 7
+        self.handler._timer = MagicMock()  # simulate a pending timer
+        with patch("resume_mcp_server.server._collection", mock_collection):
+            self.handler._reload()
+        mock_collection.load.assert_called_once_with()
+        self.assertIsNone(self.handler._timer)
+
+    def test_reload_with_no_collection_is_safe(self):
+        self.handler._timer = MagicMock()
+        with patch("resume_mcp_server.server._collection", None):
+            self.handler._reload()  # should not raise
         self.assertIsNone(self.handler._timer)
 
 

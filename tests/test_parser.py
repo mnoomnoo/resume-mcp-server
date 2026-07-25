@@ -8,6 +8,7 @@ from resume_mcp_server.parser import (
     _parse_projects,
     _parse_education,
     _parse_skills,
+    _parse_work_legacy,
     _parse_work_modern,
     _split_company_title,
     parse_resume,
@@ -187,6 +188,110 @@ class TestParseWorkModern(unittest.TestCase):
         entries = _parse_work_modern(lines)
         self.assertEqual(len(entries[0].achievements), 1)
         self.assertIn("microservice", entries[0].achievements[0].desc)
+
+
+# ── _parse_work_legacy ────────────────────────────────────────────────────────
+
+class TestParseWorkLegacy(unittest.TestCase):
+    def test_basic_pairing_by_order(self):
+        we_lines = [
+            "Built a distributed system that handles large traffic",
+            "Reduced latency significantly across the platform",
+            "",
+            "Developed RESTful APIs consumed by clients daily",
+        ]
+        all_lines = [
+            "Jane Doe",
+            "Acme Corp | Senior Engineer  2018 - 2020",
+            "Globex | Junior Engineer  2015 - 2017",
+            "Skills",
+        ]
+        entries = _parse_work_legacy(we_lines, all_lines)
+        self.assertEqual(len(entries), 2)
+        self.assertEqual(entries[0].company_name, "Acme Corp")
+        self.assertEqual(entries[0].position_title, "Senior Engineer")
+        self.assertEqual(entries[0].start_date, "2018")
+        self.assertEqual(entries[0].end_date, "2020")
+        self.assertEqual(len(entries[0].achievements), 2)
+        self.assertEqual(entries[1].company_name, "Globex")
+        self.assertEqual(len(entries[1].achievements), 1)
+
+    def test_short_achievement_lines_filtered(self):
+        we_lines = ["Short", "Built a scalable microservice architecture for payments"]
+        all_lines = ["Acme Corp | Senior Engineer  2018 - 2020"]
+        entries = _parse_work_legacy(we_lines, all_lines)
+        self.assertEqual(len(entries[0].achievements), 1)
+        self.assertIn("microservice", entries[0].achievements[0].desc)
+
+    def test_no_company_lines_returns_empty(self):
+        we_lines = ["Some achievement paragraph with plenty of detail here"]
+        all_lines = ["Jane Doe", "Skills", "Python, Go"]
+        self.assertEqual(_parse_work_legacy(we_lines, all_lines), [])
+
+    def test_no_paragraph_groups_returns_empty(self):
+        we_lines = ["", "", ""]
+        all_lines = ["Acme Corp | Senior Engineer  2018 - 2020"]
+        self.assertEqual(_parse_work_legacy(we_lines, all_lines), [])
+
+    def test_more_company_entries_than_groups_gets_empty_achievements(self):
+        we_lines = ["Only one paragraph group exists in this section here"]
+        all_lines = [
+            "Acme Corp | Senior Engineer  2018 - 2020",
+            "Globex | Junior Engineer  2015 - 2017",
+        ]
+        entries = _parse_work_legacy(we_lines, all_lines)
+        self.assertEqual(len(entries), 2)
+        self.assertEqual(len(entries[0].achievements), 1)
+        self.assertEqual(entries[1].achievements, [])
+
+    def test_more_groups_than_company_entries_extra_groups_dropped(self):
+        we_lines = [
+            "First paragraph group with a sufficiently long achievement",
+            "",
+            "Second paragraph group with a sufficiently long achievement",
+        ]
+        all_lines = ["Acme Corp | Senior Engineer  2018 - 2020"]
+        entries = _parse_work_legacy(we_lines, all_lines)
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0].company_name, "Acme Corp")
+
+    def test_company_line_inside_we_section_is_excluded_from_search(self):
+        we_lines = [
+            "Acme Corp | Senior Engineer  2018 - 2020",
+            "Managed a team of five engineers across two products",
+        ]
+        all_lines = we_lines + ["Globex | Junior Engineer  2015 - 2017"]
+        entries = _parse_work_legacy(we_lines, all_lines)
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0].company_name, "Globex")
+
+    def test_full_resume_triggers_legacy_fallback(self):
+        resume_text = (
+            "Jane Doe\n"
+            "jane@example.com\n"
+            "503-555-1234\n"
+            "\n"
+            "Companies\n"
+            "Acme Corp | Senior Engineer  2018 - 2020\n"
+            "Globex | Junior Engineer  2015 - 2017\n"
+            "\n"
+            "Experience\n"
+            "Built a distributed system that handles large traffic efficiently\n"
+            "Reduced latency significantly through caching improvements\n"
+            "\n"
+            "Managed a team of five engineers across two major products\n"
+            "Developed RESTful APIs consumed by clients on a daily basis\n"
+            "\n"
+            "Skills\n"
+            "Python, Go, Rust\n"
+        )
+        result = parse_resume(resume_text, "jane_resume.md")
+        self.assertIsNotNone(result)
+        self.assertEqual(len(result.work_experiences), 2)
+        self.assertEqual(result.work_experiences[0].company_name, "Acme Corp")
+        self.assertEqual(len(result.work_experiences[0].achievements), 2)
+        self.assertEqual(result.work_experiences[1].company_name, "Globex")
+        self.assertEqual(len(result.work_experiences[1].achievements), 2)
 
 
 # ── _parse_projects ───────────────────────────────────────────────────────────
