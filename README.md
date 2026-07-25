@@ -254,8 +254,13 @@ claude mcp add resume-mcp-server resume-mcp-server -e RESUME_DIR=/path/to/your/r
 | `FASTMCP_TRANSPORT` | `http` (local) / `stdio` (Docker image) | Transport protocol (`http` or `stdio`) |
 | `FASTMCP_HOST` | `0.0.0.0` | Bind address |
 | `FASTMCP_PORT` | `8001` | Port the HTTP server listens on |
+| `DOC_TYPE_PATTERN_RESUME` | `resume` | Regex used to classify a filename as `resume` |
+| `DOC_TYPE_PATTERN_COVER_LETTER` | `cover.?letter\|_cl\.\|_cl_\|coverletter` | Regex used to classify a filename as `cover_letter` |
+| `DOC_TYPE_PATTERN_APPLICATION_MATERIAL` | `interview\|study.?guide\|why_\|application.?question\|job.?desc` | Regex used to classify a filename as `application_material` |
 
 A `.env` file in the working directory is loaded automatically on startup if present. Shell environment variables and values set by the MCP client always take precedence over `.env` values.
+
+Each `DOC_TYPE_PATTERN_*` variable replaces the default regex for that category (filenames are matched in order: resume, then cover letter, then application material, then everything else falls back to `other`). Leave a variable unset to keep its default; an invalid regex is ignored and the default is used instead.
 
 The server scans `RESUME_DIR` recursively on startup and reloads automatically when files change.
 
