@@ -118,25 +118,35 @@ def _safe_search(fn, *args, **kwargs) -> dict[str, Any]:
         return {"error": str(e)}
 
 
-@mcp.tool()
-def list_resume_summaries(limit: int = 100, offset: int = 0) -> dict[str, Any]:
-    """List all resumes as lightweight identity records — id, name, email, phone only.
+# All tools in this server are pure read-only queries over a local, in-memory
+# collection — no mutation, no network calls — so every tool shares this annotation set.
+_READONLY = {"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}
+
+
+@mcp.tool(annotations=_READONLY)
+def list_resume_summaries(query: str | None = None, mode: str = "and",
+                           limit: int = 100, offset: int = 0) -> dict[str, Any]:
+    """List resumes as lightweight identity records — id, name, email, phone only.
     Use this to orient and pick a resume_id before fetching details with other tools.
     Much more token-efficient than list_resumes when you only need to identify who is present.
+    Pass query to filter by first or last name (absorbs the old search_resumes_by_name tool).
     Response includes total_count and items for pagination.
 
     Args:
+        query: Optional name fragment to filter by first or last name (case-insensitive)
+        mode: Token match mode — 'and' (default) requires all words to appear in the same name field; 'or' requires any word to match; 'regex' treats query as a case-insensitive regular expression
         limit: Maximum number of results to return (default 100)
         offset: Number of results to skip for pagination (default 0)
-    Example: list_resume_summaries(limit=50)
+    Example: list_resume_summaries(query="jane doe")
     """
-    return _safe_search(_get_repo().list_resume_summaries, limit=limit, offset=offset)
+    return _safe_search(_get_repo().list_resume_summaries, query=query, mode=mode, limit=limit, offset=offset)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READONLY)
 def get_resume_profile(resume_id: str) -> dict[str, Any]:
     """Get a resume's top-level fields (contact info, professional statement, education)
     without the nested work experience and badge skill lists.
+    See also: get_resume_full for everything about this resume in one call.
     Returns {"error": ...} if resume_id is not found.
 
     Args:
@@ -149,18 +159,39 @@ def get_resume_profile(resume_id: str) -> dict[str, Any]:
     return result
 
 
-@mcp.tool()
-def list_resumes(doc_type: str | None = None, limit: int = 100, offset: int = 0) -> dict[str, Any]:
+@mcp.tool(annotations=_READONLY)
+def get_resume_full(resume_id: str) -> dict[str, Any]:
+    """Get a resume's complete nested structure in one call: profile fields plus all
+    work experiences (with achievements), badge skills, side projects (with technologies),
+    and education entries (with competencies).
+    Prefer get_resume_profile plus the scoped list_* tools (list_work_experiences,
+    list_skills, list_side_projects, list_education) when you only need part of this —
+    it's more token-efficient. Use get_resume_full when you need the whole picture at once.
+    Returns {"error": ...} if resume_id is not found.
+
+    Args:
+        resume_id: Resume ID from list_resume_summaries
+    Example: get_resume_full("a1b2c3d4-...")
+    """
+    result = _get_repo().find_resume(resume_id)
+    if result is None:
+        return {"error": f"resume {resume_id!r} not found"}
+    return result.model_dump()
+
+
+@mcp.tool(annotations=_READONLY)
+def list_resumes(doc_type: str | None = None, limit: int = 10, offset: int = 0) -> dict[str, Any]:
     """List all documents. When doc_type is 'resume' (or omitted), structured resume data
     is returned if available; otherwise flat file metadata is returned.
     Response includes total_count and items for pagination.
-    See also: list_resume_summaries for a lighter-weight, more token-efficient listing.
+    See also: list_resume_summaries for a lighter-weight, more token-efficient listing;
+    get_resume_full for one resume's full nested structure by resume_id.
 
     Args:
         doc_type: Optional filter — one of: resume, cover_letter, application_material, other
-        limit: Maximum number of results to return (default 100)
+        limit: Maximum number of results to return (default 10 — each item is a fully nested resume)
         offset: Number of results to skip for pagination (default 0)
-    Example: list_resumes(doc_type="resume", limit=50)
+    Example: list_resumes(doc_type="resume", limit=10)
     """
     try:
         if doc_type is None or doc_type == "resume":
@@ -184,7 +215,7 @@ def list_resumes(doc_type: str | None = None, limit: int = 100, offset: int = 0)
         return {"error": str(e)}
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READONLY)
 def get_resume(path: str) -> dict[str, Any]:
     """Return the full extracted text of a document, as {"text": "..."}.
     Note: takes a file path (see list_resumes), not a resume_id — use get_resume_profile
@@ -201,7 +232,7 @@ def get_resume(path: str) -> dict[str, Any]:
         return {"error": str(e)}
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READONLY)
 def search_resumes(query: str, doc_type: str | None = None, mode: str = "and",
                     limit: int = 100, offset: int = 0) -> dict[str, Any]:
     """Search across all documents for a keyword or phrase.
@@ -218,77 +249,7 @@ def search_resumes(query: str, doc_type: str | None = None, mode: str = "and",
     return _safe_search(_get_collection().search, query, doc_type, mode, limit, offset)
 
 
-@mcp.tool()
-def search_skills(query: str, mode: str = "and", limit: int = 100, offset: int = 0) -> dict[str, Any]:
-    """Search badge skills by title keyword.
-    Response includes total_count, items, has_more, next_offset, and message for pagination.
-
-    Args:
-        query: Text to search for in skill titles (case-insensitive)
-        mode: Token match mode — 'and' (default) requires all words to match; 'or' requires any word to match; 'regex' treats query as a case-insensitive regular expression
-        limit: Maximum number of results to return (default 100)
-        offset: Number of results to skip for pagination (default 0)
-    Example: search_skills("kubernetes", mode="and")
-    """
-    return _safe_search(_get_repo().search_badge_skills, query, mode, limit, offset)
-
-
-@mcp.tool()
-def search_work_experiences(query: str, mode: str = "and", limit: int = 100, offset: int = 0) -> dict[str, Any]:
-    """Search work experiences by company name, position title, or achievement descriptions.
-
-    Each result includes a resume_id field identifying which resume the experience belongs to.
-    Response includes total_count, items, has_more, next_offset, and message for pagination.
-
-    Args:
-        query: Text to search for (case-insensitive)
-        mode: Token match mode — 'and' (default) requires all words to match within the same field; 'or' requires any word to match; 'regex' treats query as a case-insensitive regular expression
-        limit: Maximum number of results to return (default 100)
-        offset: Number of results to skip for pagination (default 0)
-    Example: search_work_experiences("staff engineer", mode="and")
-    """
-    return _safe_search(_get_repo().search_work_experiences, query, mode, limit, offset)
-
-
-@mcp.tool()
-def search_achievements(query: str, resume_id: str | None = None, mode: str = "and",
-                         limit: int = 100, offset: int = 0) -> dict[str, Any]:
-    """Search achievement descriptions directly, returning only matching bullets with minimal parent context.
-    More token-efficient than search_work_experiences when you only need matching achievements.
-
-    Each result includes: id, desc, company_name, position_title, work_experience_id, resume_id.
-    Response includes total_count, items, has_more, next_offset, and message for pagination.
-
-    Args:
-        query: Text to search for in achievement descriptions (case-insensitive)
-        resume_id: Optional resume ID from list_resume_summaries to scope the search to one resume
-        mode: Token match mode — 'and' (default) requires all words to appear in the description; 'or' requires any word to match; 'regex' treats query as a case-insensitive regular expression
-        limit: Maximum number of results to return (default 100)
-        offset: Number of results to skip for pagination (default 0)
-    Example: search_achievements("reduced latency", mode="and")
-    """
-    return _safe_search(_get_repo().search_achievements, query, resume_id, mode, limit, offset)
-
-
-@mcp.tool()
-def search_resumes_by_name(query: str, mode: str = "and", limit: int = 100, offset: int = 0) -> dict[str, Any]:
-    """Find resumes by person name (first or last name). Returns minimal identity fields only —
-    use the returned id with other tools to fetch full details.
-
-    Each result includes: id, first_name, last_name, email, phone_num.
-    Response includes total_count, items, has_more, next_offset, and message for pagination.
-
-    Args:
-        query: Name fragment to search for (case-insensitive)
-        mode: Token match mode — 'and' (default) requires all words to appear in the same name field; 'or' requires any word to match; 'regex' treats query as a case-insensitive regular expression
-        limit: Maximum number of results to return (default 100)
-        offset: Number of results to skip for pagination (default 0)
-    Example: search_resumes_by_name("jane doe", mode="and")
-    """
-    return _safe_search(_get_repo().search_resumes_by_name, query, mode, limit, offset)
-
-
-@mcp.tool()
+@mcp.tool(annotations=_READONLY)
 def search_resumes_by_skill(skill: str | list[str], mode: str = "and", limit: int = 100, offset: int = 0) -> dict[str, Any]:
     """Find which resumes list one or more given badge skills. Returns resume identity and matched
     skill names only — more token-efficient than list_resumes when filtering by skill.
@@ -311,23 +272,31 @@ def search_resumes_by_skill(skill: str | list[str], mode: str = "and", limit: in
     return _safe_search(_get_repo().search_resumes_by_skill, skill, mode, limit, offset)
 
 
-@mcp.tool()
-def list_work_experiences(resume_id: str | None = None, current_only: bool = False, limit: int = 100, offset: int = 0) -> dict[str, Any]:
-    """List work experiences, optionally filtered to a specific resume and/or only current roles.
+@mcp.tool(annotations=_READONLY)
+def list_work_experiences(resume_id: str | None = None, query: str | None = None,
+                           current_only: bool = False, mode: str = "and",
+                           limit: int = 25, offset: int = 0) -> dict[str, Any]:
+    """List work experiences, optionally filtered to a specific resume, only current roles,
+    and/or a keyword query matched against company name, position title, or achievement
+    descriptions (absorbs the old search_work_experiences tool).
+    Each result includes a resume_id field identifying which resume the experience belongs to.
     Response includes total_count and items for pagination.
     Returns {"error": ...} if resume_id is given but not found.
 
     Args:
         resume_id: Optional resume ID from list_resume_summaries to filter results
+        query: Optional text to match against company name, position title, or achievement descriptions (case-insensitive)
         current_only: If True, return only roles where end_date is 'Present'
-        limit: Maximum number of results to return (default 100)
+        mode: Token match mode for query — 'and' (default) requires all words to match within the same field; 'or' requires any word to match; 'regex' treats query as a case-insensitive regular expression
+        limit: Maximum number of results to return (default 25)
         offset: Number of results to skip for pagination (default 0)
-    Example: list_work_experiences(current_only=True)
+    Example: list_work_experiences(query="staff engineer", current_only=True)
     """
-    return _safe_search(_get_repo().list_work_experiences, resume_id=resume_id, current_only=current_only, limit=limit, offset=offset)
+    return _safe_search(_get_repo().list_work_experiences, resume_id=resume_id, query=query,
+                         current_only=current_only, mode=mode, limit=limit, offset=offset)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READONLY)
 def get_work_experience(id: str) -> dict[str, Any]:
     """Get a single work experience entry with its achievements.
     Returns {"error": ...} if id is not found.
@@ -342,22 +311,35 @@ def get_work_experience(id: str) -> dict[str, Any]:
     return result.model_dump()
 
 
-@mcp.tool()
-def list_achievements(resume_id: str | None = None, limit: int = 100, offset: int = 0) -> dict[str, Any]:
-    """List all achievements (phrase skills), optionally filtered to a specific resume.
+@mcp.tool(annotations=_READONLY)
+def list_achievements(resume_id: str | None = None, query: str | None = None,
+                       mode: str = "and", limit: int = 50, offset: int = 0) -> dict[str, Any]:
+    """List achievements (resume bullet points), optionally filtered to a specific resume
+    and/or a keyword query matched against the achievement text (absorbs the old
+    search_achievements tool).
+
+    Response shape depends on the arguments given, to keep the common case cheap:
+    - resume_id given, query omitted: bare {id, desc} per item (cheapest — you already
+      know which resume these belong to).
+    - query given, and/or resume_id omitted: each item also includes company_name,
+      position_title, work_experience_id, and resume_id, since that context would
+      otherwise be unrecoverable from the achievement alone.
     Response includes total_count and items for pagination.
     Returns {"error": ...} if resume_id is given but not found.
 
     Args:
         resume_id: Optional resume ID from list_resume_summaries to filter results
-        limit: Maximum number of results to return (default 100)
+        query: Optional text to search for in achievement descriptions (case-insensitive)
+        mode: Token match mode for query — 'and' (default) requires all words to appear in the description; 'or' requires any word to match; 'regex' treats query as a case-insensitive regular expression
+        limit: Maximum number of results to return (default 50)
         offset: Number of results to skip for pagination (default 0)
     Example: list_achievements(resume_id="a1b2c3d4-...")
     """
-    return _safe_search(_get_repo().list_achievements, resume_id=resume_id, limit=limit, offset=offset)
+    return _safe_search(_get_repo().list_achievements, resume_id=resume_id, query=query,
+                         mode=mode, limit=limit, offset=offset)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READONLY)
 def get_achievement(id: str) -> dict[str, Any]:
     """Get a single achievement (phrase skill) by ID.
     Returns {"error": ...} if id is not found.
@@ -372,28 +354,35 @@ def get_achievement(id: str) -> dict[str, Any]:
     return result.model_dump()
 
 
-@mcp.tool()
-def list_badge_skills(resume_id: str | None = None, limit: int = 100, offset: int = 0) -> dict[str, Any]:
-    """List all badge skills (technologies, tools, languages), optionally filtered to a resume.
+@mcp.tool(annotations=_READONLY)
+def list_skills(resume_id: str | None = None, query: str | None = None,
+                 mode: str = "and", limit: int = 100, offset: int = 0) -> dict[str, Any]:
+    """List badge skills (technologies, tools, languages), optionally filtered to a resume
+    and/or a keyword query matched against the skill title (absorbs the old search_skills tool).
+    Note: badge skills are deduplicated and shared across resumes by title, so — unlike
+    work experiences, side projects, and education — items here do not carry a resume_id.
     Response includes total_count and items for pagination.
     Returns {"error": ...} if resume_id is given but not found.
 
     Args:
         resume_id: Optional resume ID from list_resume_summaries to filter results
+        query: Optional text to search for in skill titles (case-insensitive)
+        mode: Token match mode for query — 'and' (default) requires all words to match; 'or' requires any word to match; 'regex' treats query as a case-insensitive regular expression
         limit: Maximum number of results to return (default 100)
         offset: Number of results to skip for pagination (default 0)
-    Example: list_badge_skills(resume_id="a1b2c3d4-...")
+    Example: list_skills(query="kubernetes")
     """
-    return _safe_search(_get_repo().list_badge_skills, resume_id=resume_id, limit=limit, offset=offset)
+    return _safe_search(_get_repo().list_badge_skills, resume_id=resume_id, query=query,
+                         mode=mode, limit=limit, offset=offset)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READONLY)
 def get_badge_skill(id: str) -> dict[str, Any]:
     """Get a single badge skill by ID.
     Returns {"error": ...} if id is not found.
 
     Args:
-        id: Badge skill ID from list_badge_skills
+        id: Badge skill ID from list_skills
     Example: get_badge_skill("a1b2c3d4-...")
     """
     result = _get_repo().find_badge_skill(id)
@@ -402,23 +391,37 @@ def get_badge_skill(id: str) -> dict[str, Any]:
     return result.model_dump()
 
 
-@mcp.tool()
-def list_side_projects(resume_id: str | None = None, limit: int = 100, offset: int = 0) -> dict[str, Any]:
-    """List side projects (personal/portfolio projects, distinct from work experience)
-    that demonstrate competency with specific technologies, optionally filtered to a resume.
+@mcp.tool(annotations=_READONLY)
+def list_side_projects(resume_id: str | None = None, query: str | None = None,
+                        technology: str | None = None, mode: str = "and",
+                        limit: int = 25, offset: int = 0) -> dict[str, Any]:
+    """List side projects (personal/portfolio projects, distinct from work experience),
+    optionally filtered to a resume and/or matched by keyword or technology
+    (absorbs the old search_side_projects and search_side_projects_by_technology tools).
+
+    - If technology is given, projects are matched against technology names only, and each
+      result uses a lighter shape: id, name, description, matched_technologies, resume_id.
+    - Else if query is given, projects are matched against name, description, or technology
+      names, and each result includes the full nested structure plus resume_id.
+    - If both are given, technology takes precedence and query is ignored.
+    - If neither is given, today's plain listing behavior applies.
     Response includes total_count and items for pagination.
     Returns {"error": ...} if resume_id is given but not found.
 
     Args:
         resume_id: Optional resume ID from list_resume_summaries to filter results
-        limit: Maximum number of results to return (default 100)
+        query: Optional text to match against name, description, or technology (case-insensitive)
+        technology: Optional technology/skill name fragment to match (case-insensitive, partial match); takes precedence over query
+        mode: Token match mode — 'and' (default) requires all words to match within the same field; 'or' requires any word to match; 'regex' treats query/technology as a case-insensitive regular expression
+        limit: Maximum number of results to return (default 25)
         offset: Number of results to skip for pagination (default 0)
-    Example: list_side_projects(resume_id="a1b2c3d4-...")
+    Example: list_side_projects(technology="kubernetes")
     """
-    return _safe_search(_get_repo().list_side_projects, resume_id=resume_id, limit=limit, offset=offset)
+    return _safe_search(_get_repo().list_side_projects, resume_id=resume_id, query=query,
+                         technology=technology, mode=mode, limit=limit, offset=offset)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READONLY)
 def get_side_project(id: str) -> dict[str, Any]:
     """Get a single side project by ID, including the technologies it demonstrates.
     Returns {"error": ...} if id is not found.
@@ -433,63 +436,37 @@ def get_side_project(id: str) -> dict[str, Any]:
     return result.model_dump()
 
 
-@mcp.tool()
-def search_side_projects(query: str, resume_id: str | None = None, mode: str = "and",
-                          limit: int = 100, offset: int = 0) -> dict[str, Any]:
-    """Search side projects by name, description, or associated technology.
-    See also: search_side_projects_by_technology for technology-only matching with a
-    lighter-weight response shape.
-
-    Each result includes a resume_id field identifying which resume the project belongs to.
-    Response includes total_count, items, has_more, next_offset, and message for pagination.
-
-    Args:
-        query: Text to search for (case-insensitive)
-        resume_id: Optional resume ID from list_resume_summaries to scope the search to one resume
-        mode: Token match mode — 'and' (default) requires all words to match within the same field; 'or' requires any word to match; 'regex' treats query as a case-insensitive regular expression
-        limit: Maximum number of results to return (default 100)
-        offset: Number of results to skip for pagination (default 0)
-    Example: search_side_projects("open source CLI", mode="and")
-    """
-    return _safe_search(_get_repo().search_side_projects, query, resume_id, mode, limit, offset)
-
-
-@mcp.tool()
-def search_side_projects_by_technology(technology: str, mode: str = "and",
-                                        limit: int = 100, offset: int = 0) -> dict[str, Any]:
-    """Find side projects that demonstrate competency with a given technology.
-    See also: search_side_projects for broader name/description matching.
-
-    Each result includes: id, name, description, matched_technologies, resume_id.
-    Response includes total_count, items, has_more, next_offset, and message for pagination.
-
-    Args:
-        technology: Technology/skill name fragment to search for (case-insensitive, partial match)
-        mode: Token match mode — 'and' (default) requires all words to appear in the technology name; 'or' requires any word to match; 'regex' treats query as a case-insensitive regular expression
-        limit: Maximum number of results to return (default 100)
-        offset: Number of results to skip for pagination (default 0)
-    Example: search_side_projects_by_technology("kubernetes", mode="and")
-    """
-    return _safe_search(_get_repo().search_side_projects_by_technology, technology, mode, limit, offset)
-
-
-@mcp.tool()
-def list_education(resume_id: str | None = None, limit: int = 100, offset: int = 0) -> dict[str, Any]:
+@mcp.tool(annotations=_READONLY)
+def list_education(resume_id: str | None = None, query: str | None = None,
+                    competency: str | None = None, mode: str = "and",
+                    limit: int = 25, offset: int = 0) -> dict[str, Any]:
     """List education entries (degree, institution, year, and relevant coursework/competencies),
-    optionally filtered to a resume.
+    optionally filtered to a resume and/or matched by keyword or competency
+    (absorbs the old search_education and search_education_by_competency tools).
+
+    - If competency is given, entries are matched against competency names only, and each
+      result uses a lighter shape: id, institution, degree, year, matched_competencies, resume_id.
+    - Else if query is given, entries are matched against institution, degree, or competency
+      names, and each result includes the full nested structure plus resume_id.
+    - If both are given, competency takes precedence and query is ignored.
+    - If neither is given, today's plain listing behavior applies.
     Response includes total_count and items for pagination.
     Returns {"error": ...} if resume_id is given but not found.
 
     Args:
         resume_id: Optional resume ID from list_resume_summaries to filter results
-        limit: Maximum number of results to return (default 100)
+        query: Optional text to match against institution, degree, or competency (case-insensitive)
+        competency: Optional skill/competency name fragment to match (case-insensitive, partial match); takes precedence over query
+        mode: Token match mode — 'and' (default) requires all words to match within the same field; 'or' requires any word to match; 'regex' treats query/competency as a case-insensitive regular expression
+        limit: Maximum number of results to return (default 25)
         offset: Number of results to skip for pagination (default 0)
-    Example: list_education(resume_id="a1b2c3d4-...")
+    Example: list_education(competency="machine learning")
     """
-    return _safe_search(_get_repo().list_education, resume_id=resume_id, limit=limit, offset=offset)
+    return _safe_search(_get_repo().list_education, resume_id=resume_id, query=query,
+                         competency=competency, mode=mode, limit=limit, offset=offset)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READONLY)
 def get_education(id: str) -> dict[str, Any]:
     """Get a single education entry by ID, including its competencies.
     Returns {"error": ...} if id is not found.
@@ -504,48 +481,7 @@ def get_education(id: str) -> dict[str, Any]:
     return result.model_dump()
 
 
-@mcp.tool()
-def search_education(query: str, resume_id: str | None = None, mode: str = "and",
-                      limit: int = 100, offset: int = 0) -> dict[str, Any]:
-    """Search education entries by institution, degree, or competency.
-    See also: search_education_by_competency for competency-only matching with a
-    lighter-weight response shape.
-
-    Each result includes a resume_id field identifying which resume the entry belongs to.
-    Response includes total_count, items, has_more, next_offset, and message for pagination.
-
-    Args:
-        query: Text to search for (case-insensitive)
-        resume_id: Optional resume ID from list_resume_summaries to scope the search to one resume
-        mode: Token match mode — 'and' (default) requires all words to match within the same field; 'or' requires any word to match; 'regex' treats query as a case-insensitive regular expression
-        limit: Maximum number of results to return (default 100)
-        offset: Number of results to skip for pagination (default 0)
-    Example: search_education("computer science", mode="and")
-    """
-    return _safe_search(_get_repo().search_education, query, resume_id, mode, limit, offset)
-
-
-@mcp.tool()
-def search_education_by_competency(competency: str, mode: str = "and",
-                                    limit: int = 100, offset: int = 0) -> dict[str, Any]:
-    """Find education entries that demonstrate competency with a given skill — useful for
-    matching a candidate's coursework/training to a specific position's requirements.
-    See also: search_education for broader institution/degree matching.
-
-    Each result includes: id, institution, degree, year, matched_competencies, resume_id.
-    Response includes total_count, items, has_more, next_offset, and message for pagination.
-
-    Args:
-        competency: Skill/competency name fragment to search for (case-insensitive, partial match)
-        mode: Token match mode — 'and' (default) requires all words to appear in the competency name; 'or' requires any word to match; 'regex' treats query as a case-insensitive regular expression
-        limit: Maximum number of results to return (default 100)
-        offset: Number of results to skip for pagination (default 0)
-    Example: search_education_by_competency("machine learning", mode="and")
-    """
-    return _safe_search(_get_repo().search_education_by_competency, competency, mode, limit, offset)
-
-
-@mcp.tool()
+@mcp.tool(annotations=_READONLY)
 def get_collection_stats() -> dict[str, Any]:
     """Return aggregate counts and averages across the entire loaded resume collection.
 
@@ -557,7 +493,7 @@ def get_collection_stats() -> dict[str, Any]:
     return _get_repo().get_collection_stats().model_dump()
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READONLY)
 def get_skill_frequency(limit: int = 20) -> list[dict[str, Any]]:
     """Return badge skills ranked by how many resumes list them, in descending order.
 

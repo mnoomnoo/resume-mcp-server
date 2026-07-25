@@ -238,41 +238,52 @@ class TestSearchBadgeSkills(unittest.TestCase):
         self.repo.add_resume(_make_resume(skills=["Python", "Go", "Rust"]))
 
     def test_returns_match(self):
-        results = self.repo.search_badge_skills("python").items
+        results = self.repo.list_badge_skills(query="python").items
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["title"], "Python")
 
     def test_case_insensitive(self):
         self.repo.add_resume(_make_resume(skills=["TypeScript"]))
-        self.assertEqual(len(self.repo.search_badge_skills("typescript").items), 1)
-        self.assertEqual(len(self.repo.search_badge_skills("TYPESCRIPT").items), 1)
+        self.assertEqual(len(self.repo.list_badge_skills(query="typescript").items), 1)
+        self.assertEqual(len(self.repo.list_badge_skills(query="TYPESCRIPT").items), 1)
 
     def test_no_match(self):
-        self.assertEqual(self.repo.search_badge_skills("Java").items, [])
+        self.assertEqual(self.repo.list_badge_skills(query="Java").items, [])
 
     def test_partial_match(self):
         repo = ResumeRepository()
         repo.add_resume(_make_resume(skills=["JavaScript", "TypeScript", "Go"]))
-        results = repo.search_badge_skills("script").items
+        results = repo.list_badge_skills(query="script").items
         self.assertEqual({s["title"] for s in results}, {"JavaScript", "TypeScript"})
 
     def test_multi_token_and_all_present(self):
         repo = ResumeRepository()
         repo.add_resume(_make_resume(skills=["Machine Learning"]))
-        results = repo.search_badge_skills("Machine Learning").items
+        results = repo.list_badge_skills(query="Machine Learning").items
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["title"], "Machine Learning")
 
     def test_multi_token_and_one_missing(self):
         repo = ResumeRepository()
         repo.add_resume(_make_resume(skills=["Machine"]))
-        self.assertEqual(repo.search_badge_skills("Machine Learning").items, [])
+        self.assertEqual(repo.list_badge_skills(query="Machine Learning").items, [])
 
     def test_multi_token_or_any_present(self):
         repo = ResumeRepository()
         repo.add_resume(_make_resume(skills=["Machine", "Learning"]))
-        results = repo.search_badge_skills("Machine Learning", mode="or").items
+        results = repo.list_badge_skills(query="Machine Learning", mode="or").items
         self.assertEqual(len(results), 2)
+
+    def test_resume_id_and_query_combined(self):
+        # This scoping was not possible with the old search_badge_skills (it had no
+        # resume_id param at all) — new capability introduced by the merge.
+        repo = ResumeRepository()
+        resp_a = repo.add_resume(_make_resume("Alice", "A", skills=["Python", "Go"]))
+        repo.add_resume(_make_resume("Bob", "B", skills=["Python", "Rust"]))
+        results = repo.list_badge_skills(resume_id=resp_a.id, query="Python").items
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["title"], "Python")
+        self.assertEqual(repo.list_badge_skills(resume_id=resp_a.id, query="Rust").items, [])
 
 
 # ── search_work_experiences ───────────────────────────────────────────────────
@@ -283,7 +294,7 @@ class TestSearchWorkExperiences(unittest.TestCase):
 
     def test_by_company(self):
         resp = self.repo.add_resume(_make_resume(companies=["Acme", "Globex"]))
-        results = self.repo.search_work_experiences("Acme").items
+        results = self.repo.list_work_experiences(query="Acme").items
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["company_name"], "Acme")
         self.assertEqual(results[0]["resume_id"], resp.id)
@@ -301,7 +312,7 @@ class TestSearchWorkExperiences(unittest.TestCase):
             education="", work_experiences=[we], badge_skills=[], side_projects=[],
         )
         resp = self.repo.add_resume(resume)
-        results = self.repo.search_work_experiences("Senior").items
+        results = self.repo.list_work_experiences(query="Senior").items
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["position_title"], "Senior Software Engineer")
         self.assertEqual(results[0]["resume_id"], resp.id)
@@ -319,33 +330,33 @@ class TestSearchWorkExperiences(unittest.TestCase):
             education="", work_experiences=[we], badge_skills=[], side_projects=[],
         )
         resp = self.repo.add_resume(resume)
-        results = self.repo.search_work_experiences("latency").items
+        results = self.repo.list_work_experiences(query="latency").items
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["resume_id"], resp.id)
         self.assertTrue(any(a["desc"] == "Reduced latency by 40%" for a in results[0]["achievements"]))
 
     def test_no_match(self):
         self.repo.add_resume(_make_resume(companies=["Acme"]))
-        self.assertEqual(self.repo.search_work_experiences("Nonexistent Corp").items, [])
+        self.assertEqual(self.repo.list_work_experiences(query="Nonexistent Corp").items, [])
 
     def test_resume_id_present(self):
         resp_a = self.repo.add_resume(_make_resume("Alice", "A", companies=["Alpha Corp"]))
         resp_b = self.repo.add_resume(_make_resume("Bob", "B", companies=["Beta Corp"]))
-        results = self.repo.search_work_experiences("Corp").items
+        results = self.repo.list_work_experiences(query="Corp").items
         resume_ids = {r["resume_id"] for r in results}
         self.assertEqual(resume_ids, {resp_a.id, resp_b.id})
 
     def test_does_not_mix_jobs(self):
         resp_a = self.repo.add_resume(_make_resume("Alice", "A", companies=["Acme"]))
         resp_b = self.repo.add_resume(_make_resume("Bob", "B", companies=["Acme"]))
-        results = self.repo.search_work_experiences("Acme").items
+        results = self.repo.list_work_experiences(query="Acme").items
         self.assertEqual(len(results), 2)
         self.assertNotEqual(results[0]["resume_id"], results[1]["resume_id"])
         self.assertEqual({r["resume_id"] for r in results}, {resp_a.id, resp_b.id})
 
     def test_search_work_experiences_includes_resume_id_in_each_result(self):
         self.repo.add_resume(_make_resume(companies=["Acme", "Globex"]))
-        results = self.repo.search_work_experiences("Engineer").items
+        results = self.repo.list_work_experiences(query="Engineer").items
         self.assertTrue(all("resume_id" in r for r in results))
 
     def test_multi_token_and_both_in_company(self):
@@ -360,7 +371,7 @@ class TestSearchWorkExperiences(unittest.TestCase):
             work_experiences=[we], badge_skills=[], side_projects=[],
         )
         self.repo.add_resume(resume)
-        results = self.repo.search_work_experiences("Acme Corporation").items
+        results = self.repo.list_work_experiences(query="Acme Corporation").items
         self.assertEqual(len(results), 1)
 
     def test_multi_token_and_tokens_split_across_fields_no_match(self):
@@ -376,7 +387,7 @@ class TestSearchWorkExperiences(unittest.TestCase):
         )
         self.repo.add_resume(resume)
         # AND: "Google" in company_name, "Engineer" in position_title — different fields, no match
-        results = self.repo.search_work_experiences("Google Engineer").items
+        results = self.repo.list_work_experiences(query="Google Engineer").items
         self.assertEqual(results, [])
 
     def test_multi_token_or_tokens_across_fields_matches(self):
@@ -392,7 +403,7 @@ class TestSearchWorkExperiences(unittest.TestCase):
         )
         self.repo.add_resume(resume)
         # OR: "Google" matches company_name field
-        results = self.repo.search_work_experiences("Google Engineer", mode="or").items
+        results = self.repo.list_work_experiences(query="Google Engineer", mode="or").items
         self.assertEqual(len(results), 1)
 
 
@@ -519,7 +530,7 @@ class TestSearchAchievements(unittest.TestCase):
 
     def test_returns_match(self):
         resp = self.repo.add_resume(_make_resume(companies=["Acme"]))
-        results = self.repo.search_achievements("great").items
+        results = self.repo.list_achievements(query="great").items
         self.assertEqual(len(results), 1)
         self.assertIn("great", results[0]["desc"])
         self.assertEqual(results[0]["company_name"], "Acme")
@@ -527,7 +538,7 @@ class TestSearchAchievements(unittest.TestCase):
 
     def test_includes_parent_context(self):
         resp = self.repo.add_resume(_make_resume(companies=["Globex"]))
-        results = self.repo.search_achievements("Globex").items
+        results = self.repo.list_achievements(query="Globex").items
         self.assertTrue(results)
         r = results[0]
         self.assertIn("company_name", r)
@@ -538,24 +549,24 @@ class TestSearchAchievements(unittest.TestCase):
 
     def test_case_insensitive(self):
         self.repo.add_resume(_make_resume(companies=["Acme"]))
-        self.assertEqual(len(self.repo.search_achievements("GREAT").items), 1)
-        self.assertEqual(len(self.repo.search_achievements("Great").items), 1)
+        self.assertEqual(len(self.repo.list_achievements(query="GREAT").items), 1)
+        self.assertEqual(len(self.repo.list_achievements(query="Great").items), 1)
 
     def test_no_match(self):
         self.repo.add_resume(_make_resume(companies=["Acme"]))
-        self.assertEqual(self.repo.search_achievements("quantum entanglement").items, [])
+        self.assertEqual(self.repo.list_achievements(query="quantum entanglement").items, [])
 
     def test_scoped_by_resume_id(self):
         resp_a = self.repo.add_resume(_make_resume("Alice", "A", companies=["Alpha"]))
         self.repo.add_resume(_make_resume("Bob", "B", companies=["Beta"]))
-        results = self.repo.search_achievements("great", resume_id=resp_a.id).items
+        results = self.repo.list_achievements(query="great", resume_id=resp_a.id).items
         self.assertTrue(all(r["resume_id"] == resp_a.id for r in results))
         self.assertTrue(all(r["company_name"] == "Alpha" for r in results))
 
     def test_scope_wrong_resume_returns_empty(self):
         resp_a = self.repo.add_resume(_make_resume("Alice", "A", companies=["Alpha"]))
         resp_b = self.repo.add_resume(_make_resume("Bob", "B", companies=["Beta"]))
-        results = self.repo.search_achievements("Alpha", resume_id=resp_b.id).items
+        results = self.repo.list_achievements(query="Alpha", resume_id=resp_b.id).items
         self.assertEqual(results, [])
 
     def test_returns_only_matching_bullets(self):
@@ -575,7 +586,7 @@ class TestSearchAchievements(unittest.TestCase):
             ],
             badge_skills=[], side_projects=[],
         ))
-        results = self.repo.search_achievements("latency").items
+        results = self.repo.list_achievements(query="latency").items
         self.assertEqual(len(results), 1)
         self.assertIn("latency", results[0]["desc"])
 
@@ -599,7 +610,7 @@ class TestSearchAchievements(unittest.TestCase):
 
     def test_multi_token_and_both_present(self):
         self.repo.add_resume(self._make_two_token_resume())
-        results = self.repo.search_achievements("latency throughput").items
+        results = self.repo.list_achievements(query="latency throughput").items
         self.assertEqual(len(results), 1)
         self.assertIn("throughput", results[0]["desc"])
 
@@ -615,16 +626,16 @@ class TestSearchAchievements(unittest.TestCase):
             )],
             badge_skills=[], side_projects=[],
         ))
-        self.assertEqual(self.repo.search_achievements("latency throughput").items, [])
+        self.assertEqual(self.repo.list_achievements(query="latency throughput").items, [])
 
     def test_multi_token_and_explicit_mode(self):
         self.repo.add_resume(self._make_two_token_resume())
-        results = self.repo.search_achievements("latency throughput", mode="and").items
+        results = self.repo.list_achievements(query="latency throughput", mode="and").items
         self.assertEqual(len(results), 1)
 
     def test_multi_token_or_any_present(self):
         self.repo.add_resume(self._make_two_token_resume())
-        results = self.repo.search_achievements("latency throughput", mode="or").items
+        results = self.repo.list_achievements(query="latency throughput", mode="or").items
         self.assertEqual(len(results), 2)
 
     def test_multi_token_or_none_present(self):
@@ -639,12 +650,12 @@ class TestSearchAchievements(unittest.TestCase):
             )],
             badge_skills=[], side_projects=[],
         ))
-        self.assertEqual(self.repo.search_achievements("latency throughput", mode="or").items, [])
+        self.assertEqual(self.repo.list_achievements(query="latency throughput", mode="or").items, [])
 
     def test_or_returns_superset_of_and(self):
         self.repo.add_resume(self._make_two_token_resume())
-        and_results = self.repo.search_achievements("latency throughput", mode="and").items
-        or_results = self.repo.search_achievements("latency throughput", mode="or").items
+        and_results = self.repo.list_achievements(query="latency throughput", mode="and").items
+        or_results = self.repo.list_achievements(query="latency throughput", mode="or").items
         self.assertLess(len(and_results), len(or_results))
 
     def test_leading_trailing_spaces_same_as_trimmed(self):
@@ -660,8 +671,8 @@ class TestSearchAchievements(unittest.TestCase):
             badge_skills=[], side_projects=[],
         ))
         self.assertEqual(
-            self.repo.search_achievements("  latency  ").items,
-            self.repo.search_achievements("latency").items,
+            self.repo.list_achievements(query="  latency  ").items,
+            self.repo.list_achievements(query="latency").items,
         )
 
     def test_multiple_spaces_between_tokens(self):
@@ -677,8 +688,8 @@ class TestSearchAchievements(unittest.TestCase):
             badge_skills=[], side_projects=[],
         ))
         self.assertEqual(
-            self.repo.search_achievements("latency  throughput").items,
-            self.repo.search_achievements("latency throughput").items,
+            self.repo.list_achievements(query="latency  throughput").items,
+            self.repo.list_achievements(query="latency throughput").items,
         )
 
     def test_token_case_insensitive(self):
@@ -693,7 +704,7 @@ class TestSearchAchievements(unittest.TestCase):
             )],
             badge_skills=[], side_projects=[],
         ))
-        results = self.repo.search_achievements("LATENCY THROUGHPUT").items
+        results = self.repo.list_achievements(query="LATENCY THROUGHPUT").items
         self.assertEqual(len(results), 1)
 
     def test_invalid_mode_falls_back_to_or(self):
@@ -712,7 +723,7 @@ class TestSearchAchievements(unittest.TestCase):
             badge_skills=[], side_projects=[],
         ))
         # unrecognized mode falls to OR branch
-        results = self.repo.search_achievements("latency throughput", mode="xor").items
+        results = self.repo.list_achievements(query="latency throughput", mode="xor").items
         self.assertEqual(len(results), 1)
         self.assertIn("latency", results[0]["desc"])
 
@@ -759,39 +770,39 @@ class TestSideProjects(unittest.TestCase):
 
     def test_search_by_name(self):
         resp = self.repo.add_resume(_make_resume(projects=[self._project(name="Resume Bot")]))
-        results = self.repo.search_side_projects("resume").items
+        results = self.repo.list_side_projects(query="resume").items
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["name"], "Resume Bot")
         self.assertEqual(results[0]["resume_id"], resp.id)
 
     def test_search_by_description(self):
         self.repo.add_resume(_make_resume(projects=[self._project(desc="A tool for tracking finances")]))
-        results = self.repo.search_side_projects("finances").items
+        results = self.repo.list_side_projects(query="finances").items
         self.assertEqual(len(results), 1)
 
     def test_search_by_technology(self):
         self.repo.add_resume(_make_resume(projects=[self._project(techs=["Rust", "WebAssembly"])]))
-        results = self.repo.search_side_projects("wasm").items
+        results = self.repo.list_side_projects(query="wasm").items
         self.assertEqual(results, [])
-        results = self.repo.search_side_projects("WebAssembly").items
+        results = self.repo.list_side_projects(query="WebAssembly").items
         self.assertEqual(len(results), 1)
 
     def test_search_scoped_by_resume_id(self):
         resp_a = self.repo.add_resume(_make_resume("Alice", "A", projects=[self._project(name="Alpha Project")]))
         self.repo.add_resume(_make_resume("Bob", "B", projects=[self._project(name="Beta Project")]))
-        results = self.repo.search_side_projects("Project", resume_id=resp_a.id).items
+        results = self.repo.list_side_projects(query="Project", resume_id=resp_a.id).items
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["name"], "Alpha Project")
 
     def test_search_no_match(self):
         self.repo.add_resume(_make_resume(projects=[self._project()]))
-        self.assertEqual(self.repo.search_side_projects("quantum entanglement").items, [])
+        self.assertEqual(self.repo.list_side_projects(query="quantum entanglement").items, [])
 
     def test_search_by_technology_returns_matched_technologies(self):
         resp = self.repo.add_resume(_make_resume(
             projects=[self._project(name="ML Pipeline", techs=["Python", "TensorFlow"])]
         ))
-        results = self.repo.search_side_projects_by_technology("python").items
+        results = self.repo.list_side_projects(technology="python").items
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["name"], "ML Pipeline")
         self.assertEqual(results[0]["matched_technologies"], ["Python"])
@@ -799,12 +810,12 @@ class TestSideProjects(unittest.TestCase):
 
     def test_search_by_technology_no_match(self):
         self.repo.add_resume(_make_resume(projects=[self._project(techs=["Python"])]))
-        self.assertEqual(self.repo.search_side_projects_by_technology("COBOL").items, [])
+        self.assertEqual(self.repo.list_side_projects(technology="COBOL").items, [])
 
     def test_search_by_technology_across_resumes(self):
         resp_a = self.repo.add_resume(_make_resume("Alice", "A", projects=[self._project(name="A Project", techs=["Go"])]))
         resp_b = self.repo.add_resume(_make_resume("Bob", "B", projects=[self._project(name="B Project", techs=["Go"])]))
-        results = self.repo.search_side_projects_by_technology("Go").items
+        results = self.repo.list_side_projects(technology="Go").items
         self.assertEqual({r["resume_id"] for r in results}, {resp_a.id, resp_b.id})
 
     def test_technology_dedup_with_badge_skills(self):
@@ -822,7 +833,7 @@ class TestSideProjects(unittest.TestCase):
         self.repo.add_resume(_make_resume(
             projects=[self._project(name="Mobile App", techs=["React Native", "TypeScript"])]
         ))
-        results = self.repo.search_side_projects_by_technology("React Native").items
+        results = self.repo.list_side_projects(technology="React Native").items
         self.assertEqual(len(results), 1)
         self.assertIn("React Native", results[0]["matched_technologies"])
 
@@ -831,7 +842,7 @@ class TestSideProjects(unittest.TestCase):
             projects=[self._project(name="Web App", techs=["React", "TypeScript"])]
         ))
         # AND: both "React" and "Native" must be in the same tech title
-        results = self.repo.search_side_projects_by_technology("React Native", mode="and").items
+        results = self.repo.list_side_projects(technology="React Native", mode="and").items
         self.assertEqual(results, [])
 
     def test_search_by_technology_multi_token_or_matches_either(self):
@@ -839,7 +850,7 @@ class TestSideProjects(unittest.TestCase):
             projects=[self._project(name="Web App", techs=["React", "TypeScript"])]
         ))
         # OR: "React" matches
-        results = self.repo.search_side_projects_by_technology("React Native", mode="or").items
+        results = self.repo.list_side_projects(technology="React Native", mode="or").items
         self.assertEqual(len(results), 1)
         self.assertIn("React", results[0]["matched_technologies"])
 
@@ -847,7 +858,7 @@ class TestSideProjects(unittest.TestCase):
         self.repo.add_resume(_make_resume(
             projects=[self._project(name="Finance Tracker", desc="Tracks personal finances")]
         ))
-        results = self.repo.search_side_projects("Finance Tracker").items
+        results = self.repo.list_side_projects(query="Finance Tracker").items
         self.assertEqual(len(results), 1)
 
     def test_search_side_projects_multi_token_and_one_missing(self):
@@ -855,14 +866,14 @@ class TestSideProjects(unittest.TestCase):
             projects=[self._project(name="Finance App", desc="Tracks expenses")]
         ))
         # "Finance" in name but "Tracker" nowhere
-        results = self.repo.search_side_projects("Finance Tracker").items
+        results = self.repo.list_side_projects(query="Finance Tracker").items
         self.assertEqual(results, [])
 
     def test_search_side_projects_multi_token_or(self):
         self.repo.add_resume(_make_resume(
             projects=[self._project(name="Finance App", desc="Tracks expenses")]
         ))
-        results = self.repo.search_side_projects("Finance Tracker", mode="or").items
+        results = self.repo.list_side_projects(query="Finance Tracker", mode="or").items
         self.assertEqual(len(results), 1)
 
 
@@ -874,61 +885,61 @@ class TestSearchResumesByName(unittest.TestCase):
 
     def test_first_name(self):
         resp = self.repo.add_resume(_make_resume("Hannah", "Hill"))
-        results = self.repo.search_resumes_by_name("Hannah").items
+        results = self.repo.list_resume_summaries(query="Hannah").items
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["id"], resp.id)
 
     def test_last_name(self):
         resp = self.repo.add_resume(_make_resume("Hannah", "Hill"))
-        results = self.repo.search_resumes_by_name("Hill").items
+        results = self.repo.list_resume_summaries(query="Hill").items
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["id"], resp.id)
 
     def test_case_insensitive(self):
         self.repo.add_resume(_make_resume("Ivan", "Ivanov"))
-        self.assertEqual(len(self.repo.search_resumes_by_name("ivan").items), 1)
-        self.assertEqual(len(self.repo.search_resumes_by_name("IVANOV").items), 1)
+        self.assertEqual(len(self.repo.list_resume_summaries(query="ivan").items), 1)
+        self.assertEqual(len(self.repo.list_resume_summaries(query="IVANOV").items), 1)
 
     def test_partial_match(self):
         self.repo.add_resume(_make_resume("Julia", "Jones"))
-        self.assertEqual(len(self.repo.search_resumes_by_name("Jul").items), 1)
+        self.assertEqual(len(self.repo.list_resume_summaries(query="Jul").items), 1)
 
     def test_no_match(self):
         self.repo.add_resume(_make_resume("Karl", "King"))
-        self.assertEqual(self.repo.search_resumes_by_name("Zephyr").items, [])
+        self.assertEqual(self.repo.list_resume_summaries(query="Zephyr").items, [])
 
     def test_returns_identity_fields_only(self):
         self.repo.add_resume(_make_resume("Lena", "Lee", companies=["Acme"], skills=["Python"]))
-        results = self.repo.search_resumes_by_name("Lena").items
+        results = self.repo.list_resume_summaries(query="Lena").items
         self.assertEqual(len(results), 1)
         self.assertEqual(set(results[0].keys()), {"id", "first_name", "last_name", "email", "phone_num"})
 
     def test_multiple_results(self):
         resp_a = self.repo.add_resume(_make_resume("Mary", "Martin"))
         resp_b = self.repo.add_resume(_make_resume("Max", "Morris"))
-        results = self.repo.search_resumes_by_name("Ma").items
+        results = self.repo.list_resume_summaries(query="Ma").items
         self.assertEqual({r["id"] for r in results}, {resp_a.id, resp_b.id})
 
     def test_multi_token_and_both_in_same_field(self):
         # compound first name — both tokens in one field
         self.repo.add_resume(_make_resume("Mary Jane", "Watson"))
-        results = self.repo.search_resumes_by_name("Mary Jane").items
+        results = self.repo.list_resume_summaries(query="Mary Jane").items
         self.assertEqual(len(results), 1)
 
     def test_multi_token_and_split_across_fields_no_match(self):
         # AND: "Hannah" in first_name but "Doe" in last_name — neither field holds both
         self.repo.add_resume(_make_resume("Hannah", "Doe"))
-        results = self.repo.search_resumes_by_name("Hannah Doe").items
+        results = self.repo.list_resume_summaries(query="Hannah Doe").items
         self.assertEqual(results, [])
 
     def test_multi_token_or_matches_first_name(self):
         self.repo.add_resume(_make_resume("Hannah", "Doe"))
-        results = self.repo.search_resumes_by_name("Hannah Zephyr", mode="or").items
+        results = self.repo.list_resume_summaries(query="Hannah Zephyr", mode="or").items
         self.assertEqual(len(results), 1)
 
     def test_multi_token_or_no_match(self):
         self.repo.add_resume(_make_resume("Hannah", "Doe"))
-        results = self.repo.search_resumes_by_name("Zephyr Quantum", mode="or").items
+        results = self.repo.list_resume_summaries(query="Zephyr Quantum", mode="or").items
         self.assertEqual(results, [])
 
 
@@ -976,7 +987,7 @@ class TestSearchResumesBySkill(unittest.TestCase):
 
     def test_search_skills_alias(self):
         self.repo.add_resume(_make_resume(skills=["Python", "Go", "Rust"]))
-        results = self.repo.search_badge_skills("py").items
+        results = self.repo.list_badge_skills(query="py").items
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["title"], "Python")
 
@@ -1042,79 +1053,79 @@ class TestEducation(unittest.TestCase):
 
     def test_search_education_by_institution(self):
         resp = self.repo.add_resume(_make_resume(education_entries=[_education(institution="University of Oregon")]))
-        results = self.repo.search_education("Oregon").items
+        results = self.repo.list_education(query="Oregon").items
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["resume_id"], resp.id)
 
     def test_search_education_by_degree(self):
         self.repo.add_resume(_make_resume(education_entries=[_education(degree="MS Computer Science")]))
-        results = self.repo.search_education("Computer Science").items
+        results = self.repo.list_education(query="Computer Science").items
         self.assertEqual(len(results), 1)
 
     def test_search_education_by_competency(self):
         self.repo.add_resume(_make_resume(education_entries=[_education(competencies=["Algorithms"])]))
-        results = self.repo.search_education("Algorithms").items
+        results = self.repo.list_education(query="Algorithms").items
         self.assertEqual(len(results), 1)
 
     def test_search_education_scoped_by_resume(self):
         resp_a = self.repo.add_resume(_make_resume("Alice", "A", education_entries=[_education(institution="Reed College")]))
         resp_b = self.repo.add_resume(_make_resume("Bob", "B", education_entries=[_education(institution="Reed College")]))
-        results = self.repo.search_education("Reed", resume_id=resp_a.id).items
+        results = self.repo.list_education(query="Reed", resume_id=resp_a.id).items
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["resume_id"], resp_a.id)
         self.assertNotEqual(results[0]["resume_id"], resp_b.id)
 
     def test_search_education_no_match(self):
         self.repo.add_resume(_make_resume(education_entries=[_education()]))
-        self.assertEqual(self.repo.search_education("Nonexistent University").items, [])
+        self.assertEqual(self.repo.list_education(query="Nonexistent University").items, [])
 
     def test_search_education_by_competency_match(self):
         resp = self.repo.add_resume(_make_resume(education_entries=[_education(competencies=["Algorithms", "Databases"])]))
-        results = self.repo.search_education_by_competency("Algorithms").items
+        results = self.repo.list_education(competency="Algorithms").items
         self.assertEqual(len(results), 1)
         self.assertIn("Algorithms", results[0]["matched_competencies"])
         self.assertEqual(results[0]["resume_id"], resp.id)
 
     def test_search_education_by_competency_partial_match(self):
         self.repo.add_resume(_make_resume(education_entries=[_education(competencies=["Operating Systems"])]))
-        results = self.repo.search_education_by_competency("operating").items
+        results = self.repo.list_education(competency="operating").items
         self.assertEqual(len(results), 1)
 
     def test_search_education_by_competency_no_match(self):
         self.repo.add_resume(_make_resume(education_entries=[_education(competencies=["Algorithms"])]))
-        self.assertEqual(self.repo.search_education_by_competency("COBOL").items, [])
+        self.assertEqual(self.repo.list_education(competency="COBOL").items, [])
 
     def test_search_education_multi_token_and_in_degree(self):
         self.repo.add_resume(_make_resume(education_entries=[_education(degree="MS Computer Science")]))
-        results = self.repo.search_education("Computer Science").items
+        results = self.repo.list_education(query="Computer Science").items
         self.assertEqual(len(results), 1)
 
     def test_search_education_multi_token_and_one_missing(self):
         self.repo.add_resume(_make_resume(education_entries=[_education(institution="Portland State University")]))
         # "Portland" is there but "Community" is not
-        results = self.repo.search_education("Portland Community").items
+        results = self.repo.list_education(query="Portland Community").items
         self.assertEqual(results, [])
 
     def test_search_education_multi_token_or(self):
         self.repo.add_resume(_make_resume(education_entries=[_education(institution="Portland State University")]))
-        results = self.repo.search_education("Portland Community", mode="or").items
+        results = self.repo.list_education(query="Portland Community", mode="or").items
         self.assertEqual(len(results), 1)
 
     def test_search_education_by_competency_multi_token_and_full_phrase(self):
         self.repo.add_resume(_make_resume(education_entries=[_education(competencies=["Machine Learning", "Databases"])]))
-        results = self.repo.search_education_by_competency("Machine Learning").items
+        results = self.repo.list_education(competency="Machine Learning").items
         self.assertEqual(len(results), 1)
         self.assertIn("Machine Learning", results[0]["matched_competencies"])
 
     def test_search_education_by_competency_multi_token_and_no_partial(self):
         # "Machine" and "Learning" are separate competencies — AND requires both in same title
         self.repo.add_resume(_make_resume(education_entries=[_education(competencies=["Machine", "Learning"])]))
-        results = self.repo.search_education_by_competency("Machine Learning", mode="and").items
+        results = self.repo.list_education(competency="Machine Learning", mode="and").items
         self.assertEqual(results, [])
 
     def test_search_education_by_competency_multi_token_or(self):
         self.repo.add_resume(_make_resume(education_entries=[_education(competencies=["Machine", "Databases"])]))
-        results = self.repo.search_education_by_competency("Machine Learning", mode="or").items
+        results = self.repo.list_education(competency="Machine Learning", mode="or").items
         self.assertEqual(len(results), 1)
         self.assertIn("Machine", results[0]["matched_competencies"])
 
@@ -1443,6 +1454,16 @@ class TestPagination(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.repo.list_resumes(offset=-1)
 
+    def test_huge_limit_is_capped_at_max_page_limit(self):
+        result = self.repo.list_resumes(limit=10_000)
+        self.assertEqual(result.total_count, 3)
+        self.assertLessEqual(len(result.items), 200)
+        self.assertIn("capped to 200", result.message)
+
+    def test_limit_at_cap_not_flagged_as_capped(self):
+        result = self.repo.list_resumes(limit=200)
+        self.assertNotIn("capped", result.message)
+
     def test_total_count_reflects_full_collection_not_slice(self):
         result = self.repo.list_resumes(limit=1, offset=0)
         self.assertEqual(result.total_count, 3)
@@ -1535,29 +1556,29 @@ class TestMakeMatcherRegexMode(unittest.TestCase):
 
     def test_regex_mode_matches_alternation(self):
         self.repo.add_resume(_make_resume(skills=["Eng", "Rust"]))
-        results = self.repo.search_badge_skills(r"^eng(ineer)?$", mode="regex").items
+        results = self.repo.list_badge_skills(query=r"^eng(ineer)?$", mode="regex").items
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["title"], "Eng")
 
     def test_regex_mode_is_case_insensitive(self):
         self.repo.add_resume(_make_resume(skills=["Python"]))
-        results = self.repo.search_badge_skills(r"PY.*ON", mode="regex").items
+        results = self.repo.list_badge_skills(query=r"PY.*ON", mode="regex").items
         self.assertEqual(len(results), 1)
 
     def test_regex_mode_no_match_returns_empty(self):
         self.repo.add_resume(_make_resume(skills=["Python"]))
-        results = self.repo.search_badge_skills(r"^cobol$", mode="regex").items
+        results = self.repo.list_badge_skills(query=r"^cobol$", mode="regex").items
         self.assertEqual(results, [])
 
     def test_invalid_regex_raises_value_error(self):
         self.repo.add_resume(_make_resume(skills=["Python"]))
         with self.assertRaises(ValueError):
-            self.repo.search_badge_skills("(", mode="regex")
+            self.repo.list_badge_skills(query="(", mode="regex")
 
     def test_and_or_mode_still_tokenizes_and_escapes(self):
         # Regex-special characters in an "and"/"or" query are treated literally
         self.repo.add_resume(_make_resume(skills=["C++"]))
-        results = self.repo.search_badge_skills("C++").items
+        results = self.repo.list_badge_skills(query="C++").items
         self.assertEqual(len(results), 1)
 
 

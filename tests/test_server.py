@@ -12,27 +12,20 @@ from resume_mcp_server.server import (
     get_collection_stats,
     get_education,
     get_resume,
+    get_resume_full,
     get_resume_profile,
     get_side_project,
     get_skill_frequency,
     get_work_experience,
     list_achievements,
-    list_badge_skills,
     list_education,
     list_resume_summaries,
     list_resumes,
     list_side_projects,
+    list_skills,
     list_work_experiences,
-    search_achievements,
-    search_education,
-    search_education_by_competency,
     search_resumes,
-    search_resumes_by_name,
     search_resumes_by_skill,
-    search_side_projects,
-    search_side_projects_by_technology,
-    search_skills,
-    search_work_experiences,
 )
 
 _JANE_RESUME = """\
@@ -194,16 +187,16 @@ class TestServerEmptyDir(unittest.TestCase):
         self.assertIn("error", result)
 
     def test_search_skills_empty(self):
-        self.assertEqual(search_skills("python")["items"], [])
+        self.assertEqual(list_skills(query="python")["items"], [])
 
     def test_search_work_experiences_empty(self):
-        self.assertEqual(search_work_experiences("engineer")["items"], [])
+        self.assertEqual(list_work_experiences(query="engineer")["items"], [])
 
     def test_search_achievements_empty(self):
-        self.assertEqual(search_achievements("led")["items"], [])
+        self.assertEqual(list_achievements(query="led")["items"], [])
 
     def test_search_resumes_by_name_empty(self):
-        self.assertEqual(search_resumes_by_name("Jane")["items"], [])
+        self.assertEqual(list_resume_summaries(query="Jane")["items"], [])
 
     def test_search_resumes_by_skill_empty(self):
         self.assertEqual(search_resumes_by_skill("Docker")["items"], [])
@@ -225,7 +218,7 @@ class TestServerEmptyDir(unittest.TestCase):
         self.assertIn("error", result)
 
     def test_list_badge_skills_empty(self):
-        self.assertEqual(list_badge_skills()["items"], [])
+        self.assertEqual(list_skills()["items"], [])
 
     def test_get_badge_skill_unknown_returns_error(self):
         result = get_badge_skill("nonexistent-id")
@@ -241,10 +234,10 @@ class TestServerEmptyDir(unittest.TestCase):
         self.assertIn("error", result)
 
     def test_search_side_projects_empty(self):
-        self.assertEqual(search_side_projects("python")["items"], [])
+        self.assertEqual(list_side_projects(query="python")["items"], [])
 
     def test_search_side_projects_by_technology_empty(self):
-        self.assertEqual(search_side_projects_by_technology("python")["items"], [])
+        self.assertEqual(list_side_projects(technology="python")["items"], [])
 
 
 # ── Collection-layer tools ────────────────────────────────────────────────────
@@ -409,6 +402,32 @@ class TestGetResumeProfile(_ServerFixture):
         self.assertIn("no-such-id", result["error"])
 
 
+class TestGetResumeFull(_ServerFixture):
+    def _jane_id(self):
+        return next(s["id"] for s in list_resume_summaries()["items"] if s["first_name"] == "Jane")
+
+    def test_known_id_returns_full_nested_structure(self):
+        resume = get_resume_full(self._jane_id())
+        self.assertIsInstance(resume, dict)
+        self.assertIn("professional_statement", resume)
+        self.assertIn("work_experiences", resume)
+        self.assertIn("badge_skills", resume)
+        self.assertIn("side_projects", resume)
+        self.assertIn("education_entries", resume)
+        self.assertGreater(len(resume["work_experiences"]), 0)
+        self.assertIn("achievements", resume["work_experiences"][0])
+
+    def test_no_created_at_anywhere(self):
+        import json
+        self.assertNotIn("created_at", json.dumps(get_resume_full(self._jane_id())))
+
+    def test_unknown_id_returns_error(self):
+        result = get_resume_full("no-such-id")
+        self.assertIsInstance(result, dict)
+        self.assertIn("error", result)
+        self.assertIn("no-such-id", result["error"])
+
+
 class TestListWorkExperiences(_ServerFixture):
     def test_all_returns_at_least_four(self):
         result = list_work_experiences()
@@ -443,6 +462,17 @@ class TestListWorkExperiences(_ServerFixture):
     def test_result_is_serialisable(self):
         import json
         json.dumps(list_work_experiences())
+
+    def test_unscoped_items_include_resume_id(self):
+        wes = list_work_experiences()["items"]
+        self.assertTrue(all("resume_id" in w and w["resume_id"] for w in wes))
+
+    def test_query_matches_company_position_or_achievement(self):
+        results = list_work_experiences(query="Acme")["items"]
+        self.assertTrue(any(w["company_name"] == "Acme Corp" for w in results))
+
+    def test_query_no_match_returns_empty(self):
+        self.assertEqual(list_work_experiences(query="xyzzy_impossible_9999")["items"], [])
 
 
 class TestGetWorkExperience(_ServerFixture):
@@ -491,6 +521,30 @@ class TestListAchievements(_ServerFixture):
         import json
         json.dumps(list_achievements())
 
+    def test_bare_shape_when_scoped_and_no_query(self):
+        jane_id = next(s["id"] for s in list_resume_summaries()["items"] if s["first_name"] == "Jane")
+        achs = list_achievements(resume_id=jane_id)["items"]
+        self.assertTrue(achs)
+        for a in achs:
+            self.assertEqual(set(a.keys()), {"id", "desc"})
+
+    def test_rich_shape_when_unscoped(self):
+        achs = list_achievements()["items"]
+        self.assertTrue(achs)
+        for a in achs:
+            self.assertIn("company_name", a)
+            self.assertIn("position_title", a)
+            self.assertIn("work_experience_id", a)
+            self.assertIn("resume_id", a)
+
+    def test_rich_shape_when_query_given_even_if_scoped(self):
+        jane_id = next(s["id"] for s in list_resume_summaries()["items"] if s["first_name"] == "Jane")
+        achs = list_achievements(resume_id=jane_id, query="e")["items"]
+        self.assertTrue(achs)
+        for a in achs:
+            self.assertIn("company_name", a)
+            self.assertIn("resume_id", a)
+
 
 class TestGetAchievement(_ServerFixture):
     def test_known_id_returns_dict(self):
@@ -515,40 +569,46 @@ class TestGetAchievement(_ServerFixture):
 
 class TestListBadgeSkills(_ServerFixture):
     def test_all_returns_skills(self):
-        titles = {s["title"] for s in list_badge_skills()["items"]}
+        titles = {s["title"] for s in list_skills()["items"]}
         self.assertIn("Python", titles)
         self.assertIn("Docker", titles)
 
     def test_results_are_dicts_with_title(self):
-        skills = list_badge_skills()["items"]
+        skills = list_skills()["items"]
         for s in skills:
             self.assertIn("id", s)
             self.assertIn("title", s)
 
     def test_resume_id_filter(self):
         jane_id = next(s["id"] for s in list_resume_summaries()["items"] if s["first_name"] == "Jane")
-        titles = {s["title"] for s in list_badge_skills(resume_id=jane_id)["items"]}
+        titles = {s["title"] for s in list_skills(resume_id=jane_id)["items"]}
         self.assertIn("Go", titles)
         self.assertNotIn("Terraform", titles)
 
     def test_unknown_resume_id_returns_error(self):
-        result = list_badge_skills(resume_id="bad-id")
+        result = list_skills(resume_id="bad-id")
         self.assertIn("error", result)
 
     def test_result_is_serialisable(self):
         import json
-        json.dumps(list_badge_skills())
+        json.dumps(list_skills())
+
+    def test_resume_id_and_query_combined(self):
+        jane_id = next(s["id"] for s in list_resume_summaries()["items"] if s["first_name"] == "Jane")
+        titles = {s["title"] for s in list_skills(resume_id=jane_id, query="Go")["items"]}
+        self.assertIn("Go", titles)
+        self.assertNotIn("Python", titles)
 
 
 class TestGetBadgeSkill(_ServerFixture):
     def test_known_id_returns_dict(self):
-        skill_id = list_badge_skills()["items"][0]["id"]
+        skill_id = list_skills()["items"][0]["id"]
         result = get_badge_skill(skill_id)
         self.assertIsInstance(result, dict)
         self.assertEqual(result["id"], skill_id)
 
     def test_result_has_title(self):
-        skill_id = list_badge_skills()["items"][0]["id"]
+        skill_id = list_skills()["items"][0]["id"]
         result = get_badge_skill(skill_id)
         self.assertIn("title", result)
         self.assertIsInstance(result["title"], str)
@@ -568,7 +628,7 @@ class TestListSideProjects(_ServerFixture):
 
     def test_resume_id_filter(self):
         all_count = list_side_projects()["total_count"]
-        resume_id = next(p for p in search_resumes_by_name("Jane")["items"])["id"]
+        resume_id = next(p for p in list_resume_summaries(query="Jane")["items"])["id"]
         results = list_side_projects(resume_id=resume_id)["items"]
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["name"], "Resume Bot")
@@ -596,40 +656,48 @@ class TestGetSideProject(_ServerFixture):
 
 class TestSearchSideProjects(_ServerFixture):
     def test_match_by_name(self):
-        results = search_side_projects("Resume Bot")["items"]
+        results = list_side_projects(query="Resume Bot")["items"]
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["name"], "Resume Bot")
         self.assertIn("resume_id", results[0])
 
     def test_match_by_description(self):
-        results = search_side_projects("Model Context Protocol")["items"]
+        results = list_side_projects(query="Model Context Protocol")["items"]
         self.assertEqual(len(results), 1)
 
     def test_no_match_returns_empty(self):
-        self.assertEqual(search_side_projects("quantum entanglement")["items"], [])
+        self.assertEqual(list_side_projects(query="quantum entanglement")["items"], [])
 
     def test_results_are_serialisable(self):
         import json
-        json.dumps(search_side_projects("Resume")["items"])
+        json.dumps(list_side_projects(query="Resume")["items"])
 
 
 class TestSearchSideProjectsByTechnology(_ServerFixture):
     def test_match_returns_results(self):
-        results = search_side_projects_by_technology("Python")["items"]
+        results = list_side_projects(technology="Python")["items"]
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["name"], "Resume Bot")
         self.assertIn("Python", results[0]["matched_technologies"])
 
     def test_partial_match(self):
-        results = search_side_projects_by_technology("fastmcp")["items"]
+        results = list_side_projects(technology="fastmcp")["items"]
         self.assertEqual(len(results), 1)
 
     def test_no_match_returns_empty(self):
-        self.assertEqual(search_side_projects_by_technology("COBOL")["items"], [])
+        self.assertEqual(list_side_projects(technology="COBOL")["items"], [])
 
     def test_results_are_serialisable(self):
         import json
-        json.dumps(search_side_projects_by_technology("Python")["items"])
+        json.dumps(list_side_projects(technology="Python")["items"])
+
+    def test_technology_takes_precedence_over_query(self):
+        # "quantum entanglement" would match no name/description; technology="Python"
+        # should still win and return the lighter matched_technologies shape.
+        results = list_side_projects(query="quantum entanglement", technology="Python")["items"]
+        self.assertEqual(len(results), 1)
+        self.assertIn("matched_technologies", results[0])
+        self.assertNotIn("technologies", results[0])
 
 
 # ── Search tools ──────────────────────────────────────────────────────────────
@@ -637,30 +705,30 @@ class TestSearchSideProjectsByTechnology(_ServerFixture):
 
 class TestSearchSkills(_ServerFixture):
     def test_exact_match(self):
-        results = search_skills("Python")["items"]
+        results = list_skills(query="Python")["items"]
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["title"], "Python")
 
     def test_partial_match(self):
-        results = search_skills("kube")["items"]
+        results = list_skills(query="kube")["items"]
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["title"], "Kubernetes")
 
     def test_case_insensitive(self):
-        lower = search_skills("python")["items"]
-        upper = search_skills("PYTHON")["items"]
+        lower = list_skills(query="python")["items"]
+        upper = list_skills(query="PYTHON")["items"]
         self.assertEqual(len(lower), len(upper))
         self.assertEqual(lower[0]["title"], upper[0]["title"])
 
     def test_no_match_returns_empty(self):
-        self.assertEqual(search_skills("COBOL")["items"], [])
+        self.assertEqual(list_skills(query="COBOL")["items"], [])
 
     def test_results_are_serialisable(self):
         import json
-        json.dumps(search_skills("Docker")["items"])
+        json.dumps(list_skills(query="Docker")["items"])
 
     def test_result_has_id_and_title(self):
-        results = search_skills("Docker")["items"]
+        results = list_skills(query="Docker")["items"]
         self.assertGreater(len(results), 0)
         for r in results:
             self.assertIn("id", r)
@@ -669,28 +737,28 @@ class TestSearchSkills(_ServerFixture):
 
 class TestSearchWorkExperiences(_ServerFixture):
     def test_by_company_name(self):
-        results = search_work_experiences("Acme")["items"]
+        results = list_work_experiences(query="Acme")["items"]
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["company_name"], "Acme Corp")
 
     def test_by_position_title(self):
-        results = search_work_experiences("DevOps")["items"]
+        results = list_work_experiences(query="DevOps")["items"]
         self.assertGreater(len(results), 0)
         self.assertTrue(any(r["position_title"] == "DevOps Engineer" for r in results))
 
     def test_by_achievement_description(self):
-        results = search_work_experiences("pipeline")["items"]
+        results = list_work_experiences(query="pipeline")["items"]
         self.assertGreater(len(results), 0)
 
     def test_result_includes_resume_id(self):
-        results = search_work_experiences("Engineer")["items"]
+        results = list_work_experiences(query="Engineer")["items"]
         self.assertTrue(all("resume_id" in r for r in results))
 
     def test_no_match_returns_empty(self):
-        self.assertEqual(search_work_experiences("xyzzy_impossible")["items"], [])
+        self.assertEqual(list_work_experiences(query="xyzzy_impossible")["items"], [])
 
     def test_results_are_dicts_with_required_fields(self):
-        results = search_work_experiences("Engineer")["items"]
+        results = list_work_experiences(query="Engineer")["items"]
         for r in results:
             self.assertIn("id", r)
             self.assertIn("company_name", r)
@@ -698,20 +766,20 @@ class TestSearchWorkExperiences(_ServerFixture):
 
     def test_results_are_serialisable(self):
         import json
-        json.dumps(search_work_experiences("Engineer")["items"])
+        json.dumps(list_work_experiences(query="Engineer")["items"])
 
 
 class TestSearchAchievements(_ServerFixture):
     def test_match_returns_results(self):
-        results = search_achievements("pipeline")["items"]
+        results = list_achievements(query="pipeline")["items"]
         self.assertGreater(len(results), 0)
 
     def test_matching_text_in_desc(self):
-        results = search_achievements("pipeline")["items"]
+        results = list_achievements(query="pipeline")["items"]
         self.assertTrue(all("pipeline" in r["desc"].lower() for r in results))
 
     def test_result_includes_parent_context(self):
-        results = search_achievements("pipeline")["items"]
+        results = list_achievements(query="pipeline")["items"]
         for r in results:
             self.assertIn("company_name", r)
             self.assertIn("position_title", r)
@@ -720,53 +788,53 @@ class TestSearchAchievements(_ServerFixture):
 
     def test_scoped_by_resume_id(self):
         jane_id = next(s["id"] for s in list_resume_summaries()["items"] if s["first_name"] == "Jane")
-        results = search_achievements("engineers", resume_id=jane_id)["items"]
+        results = list_achievements(query="engineers", resume_id=jane_id)["items"]
         self.assertTrue(all(r["resume_id"] == jane_id for r in results))
 
     def test_wrong_scope_returns_empty(self):
         john_id = next(s["id"] for s in list_resume_summaries()["items"] if s["first_name"] == "John")
         # Jane has "Mentored...engineers" but John does not
-        results = search_achievements("mentored", resume_id=john_id)["items"]
+        results = list_achievements(query="mentored", resume_id=john_id)["items"]
         self.assertEqual(results, [])
 
     def test_no_match_returns_empty(self):
-        self.assertEqual(search_achievements("xyzzy_impossible_9999")["items"], [])
+        self.assertEqual(list_achievements(query="xyzzy_impossible_9999")["items"], [])
 
     def test_case_insensitive(self):
-        lower = search_achievements("pipeline")["items"]
-        upper = search_achievements("PIPELINE")["items"]
+        lower = list_achievements(query="pipeline")["items"]
+        upper = list_achievements(query="PIPELINE")["items"]
         self.assertEqual(len(lower), len(upper))
 
     def test_results_are_serialisable(self):
         import json
-        json.dumps(search_achievements("pipeline")["items"])
+        json.dumps(list_achievements(query="pipeline")["items"])
 
 
 class TestSearchResumesByName(_ServerFixture):
     def test_first_name_match(self):
-        results = search_resumes_by_name("Jane")["items"]
+        results = list_resume_summaries(query="Jane")["items"]
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["first_name"], "Jane")
 
     def test_last_name_match(self):
-        results = search_resumes_by_name("Smith")["items"]
+        results = list_resume_summaries(query="Smith")["items"]
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["last_name"], "Smith")
 
     def test_partial_match(self):
-        results = search_resumes_by_name("Jo")["items"]
+        results = list_resume_summaries(query="Jo")["items"]
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["first_name"], "John")
 
     def test_case_insensitive(self):
-        self.assertEqual(len(search_resumes_by_name("jane")["items"]), 1)
-        self.assertEqual(len(search_resumes_by_name("SMITH")["items"]), 1)
+        self.assertEqual(len(list_resume_summaries(query="jane")["items"]), 1)
+        self.assertEqual(len(list_resume_summaries(query="SMITH")["items"]), 1)
 
     def test_no_match_returns_empty(self):
-        self.assertEqual(search_resumes_by_name("Zephyr")["items"], [])
+        self.assertEqual(list_resume_summaries(query="Zephyr")["items"], [])
 
     def test_result_has_identity_fields(self):
-        results = search_resumes_by_name("Jane")["items"]
+        results = list_resume_summaries(query="Jane")["items"]
         r = results[0]
         self.assertIn("id", r)
         self.assertIn("first_name", r)
@@ -776,7 +844,7 @@ class TestSearchResumesByName(_ServerFixture):
 
     def test_results_are_serialisable(self):
         import json
-        json.dumps(search_resumes_by_name("Jane")["items"])
+        json.dumps(list_resume_summaries(query="Jane")["items"])
 
 
 class TestSearchResumesBySkill(_ServerFixture):
@@ -873,62 +941,68 @@ class TestGetEducation(_ServerFixture):
 
 class TestSearchEducation(_ServerFixture):
     def test_by_institution(self):
-        results = search_education("Oregon")["items"]
+        results = list_education(query="Oregon")["items"]
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["institution"], "University of Oregon")
 
     def test_by_degree(self):
-        results = search_education("Computer Engineering")["items"]
+        results = list_education(query="Computer Engineering")["items"]
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["degree"], "BS Computer Engineering")
 
     def test_by_competency(self):
-        results = search_education("Operating Systems")["items"]
+        results = list_education(query="Operating Systems")["items"]
         self.assertEqual(len(results), 2)
 
     def test_resume_id_scope(self):
         jane_id = next(s["id"] for s in list_resume_summaries()["items"] if s["first_name"] == "Jane")
-        results = search_education("Operating Systems", resume_id=jane_id)["items"]
+        results = list_education(query="Operating Systems", resume_id=jane_id)["items"]
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["resume_id"], jane_id)
 
     def test_no_match_returns_empty(self):
-        self.assertEqual(search_education("Nonexistent University")["items"], [])
+        self.assertEqual(list_education(query="Nonexistent University")["items"], [])
 
     def test_results_include_resume_id(self):
-        results = search_education("Oregon")["items"]
+        results = list_education(query="Oregon")["items"]
         self.assertTrue(all("resume_id" in r for r in results))
 
     def test_results_are_serialisable(self):
         import json
-        json.dumps(search_education("Oregon")["items"])
+        json.dumps(list_education(query="Oregon")["items"])
 
 
 class TestSearchEducationByCompetency(_ServerFixture):
     def test_match_returns_results(self):
-        results = search_education_by_competency("Algorithms")["items"]
+        results = list_education(competency="Algorithms")["items"]
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["institution"], "University of Oregon")
         self.assertIn("Algorithms", results[0]["matched_competencies"])
 
     def test_shared_competency_returns_both(self):
-        results = search_education_by_competency("Operating Systems")["items"]
+        results = list_education(competency="Operating Systems")["items"]
         self.assertEqual(len(results), 2)
 
     def test_partial_match(self):
-        results = search_education_by_competency("operating")["items"]
+        results = list_education(competency="operating")["items"]
         self.assertEqual(len(results), 2)
 
     def test_no_match_returns_empty(self):
-        self.assertEqual(search_education_by_competency("COBOL")["items"], [])
+        self.assertEqual(list_education(competency="COBOL")["items"], [])
 
     def test_results_include_resume_id(self):
-        results = search_education_by_competency("Algorithms")["items"]
+        results = list_education(competency="Algorithms")["items"]
         self.assertTrue(all("resume_id" in r for r in results))
 
     def test_results_are_serialisable(self):
         import json
-        json.dumps(search_education_by_competency("Algorithms")["items"])
+        json.dumps(list_education(competency="Algorithms")["items"])
+
+    def test_competency_takes_precedence_over_query(self):
+        results = list_education(query="quantum entanglement", competency="Algorithms")["items"]
+        self.assertEqual(len(results), 1)
+        self.assertIn("matched_competencies", results[0])
+        self.assertNotIn("competencies", results[0])
 
 
 # ── Analytics tools ───────────────────────────────────────────────────────────
@@ -1074,12 +1148,12 @@ class TestSearchResumesBySkillList(_ServerFixture):
 
 class TestRegexSearchMode(_ServerFixture):
     def test_search_skills_regex_alternation(self):
-        results = search_skills(r"kubernetes|terraform", mode="regex")["items"]
+        results = list_skills(query=r"kubernetes|terraform", mode="regex")["items"]
         titles = {r["title"].lower() for r in results}
         self.assertTrue(titles & {"kubernetes", "terraform"})
 
     def test_search_skills_invalid_regex_returns_error(self):
-        result = search_skills("(", mode="regex")
+        result = list_skills(query="(", mode="regex")
         self.assertIn("error", result)
 
     def test_search_resumes_invalid_regex_returns_error(self):
@@ -1104,15 +1178,15 @@ class TestRegexSearchMode(_ServerFixture):
 
 class TestPaginationValidation(_ServerFixture):
     def test_zero_limit_returns_error(self):
-        result = search_skills("Python", limit=0)
+        result = list_skills(query="Python", limit=0)
         self.assertIn("error", result)
 
     def test_negative_limit_returns_error(self):
-        result = search_skills("Python", limit=-1)
+        result = list_skills(query="Python", limit=-1)
         self.assertIn("error", result)
 
     def test_negative_offset_returns_error(self):
-        result = search_skills("Python", offset=-1)
+        result = list_skills(query="Python", offset=-1)
         self.assertIn("error", result)
 
     def test_offset_past_end_returns_empty_not_error(self):
@@ -1128,6 +1202,52 @@ class TestPaginationValidation(_ServerFixture):
     def test_list_resumes_also_validates(self):
         result = list_resumes(limit=-5)
         self.assertIn("error", result)
+
+    def test_huge_limit_is_capped(self):
+        result = list_skills(limit=10_000)
+        self.assertNotIn("error", result)
+        self.assertLessEqual(len(result["items"]), 200)
+        self.assertIn("capped to 200", result["message"])
+
+    def test_limit_at_cap_is_not_flagged(self):
+        result = list_skills(limit=200)
+        self.assertNotIn("error", result)
+        self.assertNotIn("capped", result["message"])
+
+
+# ── Tool registration ────────────────────────────────────────────────────────
+
+
+class TestToolRegistration(unittest.TestCase):
+    """Guards against tool-count/annotation drift (the README's tool count has
+    gone stale before — see docs/TOOLS.md and README.md, which must be kept in
+    sync with this set by hand)."""
+
+    EXPECTED_TOOL_NAMES = {
+        "list_resume_summaries", "get_resume_profile", "get_resume_full",
+        "list_resumes", "get_resume", "search_resumes",
+        "list_skills", "get_badge_skill", "search_resumes_by_skill", "get_skill_frequency",
+        "list_work_experiences", "get_work_experience", "list_achievements", "get_achievement",
+        "list_side_projects", "get_side_project",
+        "list_education", "get_education",
+        "get_collection_stats",
+    }
+
+    def test_exact_tool_set(self):
+        import asyncio
+        tools = asyncio.run(_srv.mcp.list_tools())
+        names = {t.name for t in tools}
+        self.assertEqual(names, self.EXPECTED_TOOL_NAMES)
+
+    def test_all_tools_are_readonly(self):
+        import asyncio
+        tools = asyncio.run(_srv.mcp.list_tools())
+        for t in tools:
+            with self.subTest(tool=t.name):
+                self.assertIsNotNone(t.annotations)
+                self.assertTrue(t.annotations.readOnlyHint)
+                self.assertTrue(t.annotations.idempotentHint)
+                self.assertFalse(t.annotations.openWorldHint)
 
 
 # ── ReloadHandler unit tests ──────────────────────────────────────────────────

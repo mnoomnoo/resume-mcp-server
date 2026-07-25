@@ -122,19 +122,16 @@ class ResumeCreate(BaseModel):
 
 class BadgeSkillResponse(BaseModel):
     id: ID
-    created_at: str
     title: str
 
 
 class AchievementResponse(BaseModel):
     id: ID
-    created_at: str
     desc: str
 
 
 class WorkExperienceResponse(BaseModel):
     id: ID
-    created_at: str
     company_name: str
     position_title: str
     start_date: str
@@ -144,7 +141,6 @@ class WorkExperienceResponse(BaseModel):
 
 class SideProjectResponse(BaseModel):
     id: ID
-    created_at: str
     name: str
     description: str
     technologies: list[BadgeSkillResponse]
@@ -152,7 +148,6 @@ class SideProjectResponse(BaseModel):
 
 class EducationResponse(BaseModel):
     id: ID
-    created_at: str
     institution: str
     degree: str
     year: str
@@ -161,7 +156,6 @@ class EducationResponse(BaseModel):
 
 class ResumeResponse(BaseModel):
     id: ID
-    created_at: str
     first_name: str
     last_name: str
     email: str
@@ -194,6 +188,9 @@ class SkillFrequencyItem(BaseModel):
     resume_count: int
 
 
+MAX_PAGE_LIMIT = 200
+
+
 def validate_pagination(limit: int, offset: int) -> None:
     if limit <= 0:
         raise ValueError(f"limit must be greater than 0, got {limit}")
@@ -211,12 +208,14 @@ class PaginatedResponse(BaseModel):
     @classmethod
     def paginate(cls, all_items: list[Any], offset: int, limit: int) -> "PaginatedResponse":
         validate_pagination(limit, offset)
+        effective_limit = min(limit, MAX_PAGE_LIMIT)
         total = len(all_items)
-        page = all_items[offset:offset + limit]
+        page = all_items[offset:offset + effective_limit]
         shown = offset + len(page)
         has_more = shown < total
         next_offset = shown if has_more else None
-        message = (
+        cap_note = f"Requested limit {limit} capped to {MAX_PAGE_LIMIT}. " if effective_limit < limit else ""
+        message = cap_note + (
             f"{shown} of {total} results shown. Call again with offset={next_offset} to see more."
             if has_more else
             f"All {total} results shown."

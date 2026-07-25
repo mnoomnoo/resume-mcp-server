@@ -11,13 +11,13 @@ An MCP server that gives Claude (or any MCP client) structured, searchable acces
 
 Job seekers accumulate document sprawl fast: multiple resume versions tailored to different roles, cover letter drafts, reference sheets. Manually digging through them to draft a new application is tedious. Point this server at your resume folder and Claude can answer questions like *"which of my resumes highlights Kubernetes experience?"*, *"what achievements have I listed across my backend roles?"*, or *"draft a cover letter drawing from my work at Acme Corp"* — without you pasting anything.
 
-The server parses each document into structured data (contact info, work history, education, skills, side projects) and exposes 27 tools covering full-text search, skill lookup, company and role queries, achievement mining, education search, collection analytics, and more. Files are watched and re-indexed automatically, so edits to your documents are reflected immediately.
+The server parses each document into structured data (contact info, work history, education, skills, side projects) and exposes 19 tools covering full-text search, skill lookup, company and role queries, achievement mining, education search, collection analytics, and more. Files are watched and re-indexed automatically, so edits to your documents are reflected immediately.
 
 ---
 
 ## Quick Start
 
-Give Claude structured access to your resume collection. The server parses your documents on startup and exposes 27 tools for searching by name, company, skill, education, side project, or full text, plus analytics tools for skill frequency and collection statistics — with automatic hot-reload when files change.
+Give Claude structured access to your resume collection. The server parses your documents on startup and exposes 19 tools for searching by name, company, skill, education, side project, or full text, plus analytics tools for skill frequency and collection statistics — with automatic hot-reload when files change.
 
 **Try it immediately with the included sample resumes:**
 
@@ -257,7 +257,7 @@ Types are inferred from filenames:
 
 ## Search behavior
 
-Most `search_*` tools split the query on whitespace and support three match modes via the optional `mode` parameter:
+Most tools that accept a `query` (or `technology`/`competency`) parameter split it on whitespace and support three match modes via the optional `mode` parameter:
 
 | `mode` | Behavior |
 |---|---|
@@ -269,7 +269,7 @@ Most `search_*` tools split the query on whitespace and support three match mode
 
 **Single-word queries** behave identically in `and`/`or` mode.
 
-Every `search_*` tool — including `search_resumes`, the whole-document keyword search — now shares this same `"and"`/`"or"`/`"regex"` vocabulary.
+Every tool that accepts a query-like parameter — including `search_resumes`, the whole-document keyword search — shares this same `"and"`/`"or"`/`"regex"` vocabulary.
 
 `search_resumes_by_skill` accepts either a single skill string or a list of skills. For a list, `mode` does double duty: it also controls whether a resume must match EACH skill in the list (`"and"`) or ANY skill (`"or"`); `"regex"` mode combines multiple skills with OR semantics.
 
@@ -279,7 +279,7 @@ An empty query or an empty skill list returns `{"error": "..."}` rather than an 
 
 ## Pagination
 
-All `list_*` and `search_*` tools accept `limit` (default `100`) and `offset` (default `0`) parameters and return a consistent envelope:
+All `list_*` tools (and `search_resumes`/`search_resumes_by_skill`) accept `limit` and `offset` parameters and return a consistent envelope:
 
 ```json
 {
@@ -295,6 +295,16 @@ All `list_*` and `search_*` tools accept `limit` (default `100`) and `offset` (d
 
 `limit` must be greater than 0 and `offset` must be 0 or greater — otherwise the tool returns `{"error": "..."}`. An `offset` beyond the total result count is not an error; it's a valid "past the end" page (`items: []`, `has_more: false`).
 
+**Cap and defaults.** `limit` is silently capped at `200` regardless of what's requested — if you ask for more, the response still comes back (not an error), but `message` is prefixed with `"Requested limit N capped to 200."` so you know it happened. Default `limit` varies by tool, generally lower for heavier, deeply-nested responses:
+
+| Tool | Default `limit` |
+|---|---|
+| `list_resumes` | 10 (each item is a fully nested resume) |
+| `list_work_experiences`, `list_side_projects`, `list_education` | 25 |
+| `list_achievements` | 50 |
+| `list_resume_summaries`, `list_skills`, `search_resumes`, `search_resumes_by_skill` | 100 |
+| `get_skill_frequency` | 20 (not part of the pagination envelope, but shares the same 200 cap) |
+
 ---
 
 ## Error handling
@@ -307,36 +317,29 @@ Every tool returns a dict. On failure, the dict is exactly `{"error": "<message>
 
 ## MCP Tools
 
-26 tools are exposed, covering full-text search, skill lookup, company and role queries, achievement mining, education search, collection analytics, and more.
+19 tools are exposed, covering full-text search, skill lookup, company and role queries, achievement mining, education search, collection analytics, and more. Every tool is read-only (`readOnlyHint: true`) — none mutate state or reach outside the local document collection (`openWorldHint: false`).
 
 | Tool | Description |
 |---|---|
-| `list_resume_summaries` | Lightweight identity records (id, name, email, phone) for orienting before fetching details |
+| `list_resume_summaries` | Lightweight identity records (id, name, email, phone) for orienting before fetching details; optional `query` filters by name |
+| `get_resume_profile` | A resume's top-level fields (contact info, statement, education) without nested lists |
+| `get_resume_full` | A resume's complete nested structure (work experiences, skills, side projects, education) in one call |
 | `list_resumes` | List all documents, optionally filtered by type |
 | `get_resume` | Full extracted text of a document, keyed by path (not resume_id) |
-| `get_resume_profile` | A resume's top-level fields (contact info, statement, education) without nested lists |
 | `search_resumes` | Full-text search across all documents, sorted by match count |
-| `search_resumes_by_name` | Find resumes by person name |
-| `search_resumes_by_skill` | Find which resumes list one or more given badge skills (accepts a string or a list) |
-| `search_skills` | Search badge skills (technologies, tools, languages) by title |
-| `search_work_experiences` | Search by company name, position title, or achievement bullets |
-| `list_work_experiences` | List work experience entries, optionally scoped to a resume or current roles only |
-| `get_work_experience` | A single work experience entry with its achievement bullets |
-| `list_achievements` | List all achievement bullets, optionally scoped to a resume |
-| `get_achievement` | A single achievement bullet by ID |
-| `search_achievements` | Search achievement descriptions directly, returning minimal parent context |
-| `list_badge_skills` | List all badge skills, optionally scoped to a resume |
+| `list_skills` | List badge skills, optionally scoped to a resume and/or filtered by title |
 | `get_badge_skill` | A single badge skill by ID |
-| `list_side_projects` | List side projects, optionally scoped to a resume |
-| `get_side_project` | A single side project by ID, including demonstrated technologies |
-| `search_side_projects` | Search side projects by name, description, or technology |
-| `search_side_projects_by_technology` | Find side projects demonstrating a given technology |
-| `list_education` | List education entries, optionally scoped to a resume |
-| `get_education` | A single education entry by ID, including its competencies |
-| `search_education` | Search education entries by institution, degree, or competency |
-| `search_education_by_competency` | Find education entries demonstrating a given competency |
-| `get_collection_stats` | Aggregate counts and averages across the entire loaded collection |
+| `search_resumes_by_skill` | Find which resumes list one or more given badge skills (accepts a string or a list) |
 | `get_skill_frequency` | Badge skills ranked by how many resumes list them |
+| `list_work_experiences` | List work experiences, optionally scoped to a resume, current-only, and/or a keyword query |
+| `get_work_experience` | A single work experience entry with its achievement bullets |
+| `list_achievements` | List achievement bullets, optionally scoped to a resume and/or a keyword query |
+| `get_achievement` | A single achievement bullet by ID |
+| `list_side_projects` | List side projects, optionally scoped to a resume and/or matched by keyword or technology |
+| `get_side_project` | A single side project by ID, including demonstrated technologies |
+| `list_education` | List education entries, optionally scoped to a resume and/or matched by keyword or competency |
+| `get_education` | A single education entry by ID, including its competencies |
+| `get_collection_stats` | Aggregate counts and averages across the entire loaded collection |
 
 See [docs/TOOLS.md](docs/TOOLS.md) for full parameter tables and return shapes for every tool.
 
@@ -351,3 +354,31 @@ Version 3.0.0 makes several breaking changes to the tool surface, aimed at makin
 - **Not-found and bad-filter-id responses changed shape.** Tools that used to return a bare string like `"Error: work experience 'x' not found"` now return `{"error": "work experience 'x' not found"}`. Tools that used to silently return an empty result for an unknown `resume_id` filter now return `{"error": "resume 'x' not found"}` instead.
 - **`get_resume`'s success shape changed.** It used to return the document text directly as a string; it now returns `{"text": "..."}`.
 - **`limit`/`offset` are now validated.** `limit <= 0` or `offset < 0` now return `{"error": "..."}` instead of relying on Python's slicing semantics.
+
+## Migrating from 3.x to 4.x
+
+Version 4.0.0 consolidates overlapping tools and trims per-response token weight — both aimed at making the API easier for smaller/local LLMs to use correctly, since a shorter, less redundant tool list is easier to pick from correctly, and lighter responses fit smaller context windows.
+
+- **8 `search_*` tools removed and folded into their `list_*` counterpart** as optional parameters. Each `list_*` tool now accepts an optional `query` (or, where it existed, `technology`/`competency`) parameter — pass nothing to list, pass a filter to search:
+  - `search_resumes_by_name(query, ...)` → `list_resume_summaries(query=..., ...)`
+  - `search_skills(query, ...)` → `list_skills(query=..., ...)` (also renamed from `list_badge_skills`)
+  - `search_work_experiences(query, ...)` → `list_work_experiences(query=..., ...)`
+  - `search_achievements(query, resume_id=..., ...)` → `list_achievements(query=..., resume_id=..., ...)`
+  - `search_side_projects(query, resume_id=..., ...)` → `list_side_projects(query=..., resume_id=..., ...)`
+  - `search_side_projects_by_technology(technology, ...)` → `list_side_projects(technology=..., ...)`
+  - `search_education(query, resume_id=..., ...)` → `list_education(query=..., resume_id=..., ...)`
+  - `search_education_by_competency(competency, ...)` → `list_education(competency=..., ...)`
+
+  For `list_side_projects`/`list_education`, if both `query` and `technology`/`competency` are given, `technology`/`competency` takes precedence and `query` is silently ignored.
+
+- **`list_badge_skills` renamed to `list_skills`.**
+
+- **New tool: `get_resume_full(resume_id)`.** Returns a resume's complete nested structure (work experiences with achievements, badge skills, side projects, education) in one call — previously this required `get_resume_profile` plus four separate `list_*` calls. Use `get_resume_profile` + scoped `list_*` tools instead when you only need part of the picture; it's more token-efficient.
+
+- **`created_at` removed from every response.** No tool ever filtered, sorted, or displayed it, so it was pure token overhead — this affects `list_skills`, `get_badge_skill`, `list_achievements`, `get_achievement`, `list_work_experiences`, `get_work_experience`, `list_side_projects`, `get_side_project`, `list_education`, `get_education`, `list_resumes`, `get_resume_full`.
+
+- **`list_achievements`'s response shape now depends on its arguments.** Called as `list_achievements(resume_id=...)` with no `query`, each item is the bare `{id, desc}` shape (cheapest — matches pre-4.0 `list_achievements`). If `query` is given, or `resume_id` is omitted, each item also includes `company_name`, `position_title`, `work_experience_id`, `resume_id` (matches pre-4.0 `search_achievements`).
+
+- **`list_work_experiences` and `list_side_projects` now always include `resume_id` on every item**, even when unscoped — previously only the `search_*` variants did this.
+
+- **Pagination `limit` is now capped at 200**, silently clamped rather than erroring; `message` notes when this happened. Default `limit` was also lowered on the heavier nested tools (`list_resumes`: 100→10, `list_work_experiences`/`list_side_projects`/`list_education`: 100→25, `list_achievements`: 100→50) — pass `limit` explicitly if you relied on the old default of 100.
