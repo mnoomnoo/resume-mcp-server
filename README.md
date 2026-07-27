@@ -28,7 +28,7 @@ The server parses each document into structured data (contact info, work history
 - **Read-only and safe by construction** — every tool is annotated `readOnlyHint` / `idempotentHint` / `openWorldHint: false`; nothing mutates your files or reaches outside the local document collection.
 - **Flexible deployment** — run over stdio or HTTP, standalone or via Docker/Docker Compose with CORS support, configured through environment variables or a `.env` file.
 
-See [MCP Tools](#mcp-tools) below for the full list of tools this exposes.
+See [MCP Tools](#mcp-tools) below for the full list of tools this exposes. For best extraction quality, see the [Resume Formatting Guide](docs/RESUME_FORMAT.md).
 
 ---
 
