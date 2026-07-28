@@ -166,6 +166,43 @@ class TestExtractDocx(unittest.TestCase):
         self.assertEqual(len(lines), 3)  # "Jane Doe", "jane@example.com", "Python  Expert"
 
 
+class TestExtractDocxHeaderFooter(unittest.TestCase):
+    def setUp(self):
+        import docx
+
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.path = Path(self._tmpdir.name) / "resume.docx"
+
+        doc = docx.Document()
+        section = doc.sections[0]
+        section.header.paragraphs[0].text = "Jane Doe"
+        section.header.add_paragraph("jane@example.com")
+        section.footer.paragraphs[0].text = "Confidential — page 1"
+        doc.add_paragraph("Summary")
+        doc.add_paragraph("Experienced software engineer.")
+        doc.save(str(self.path))
+
+    def tearDown(self):
+        self._tmpdir.cleanup()
+
+    def test_header_content_included(self):
+        result = extract_text(self.path)
+        self.assertIn("Jane Doe", result)
+        self.assertIn("jane@example.com", result)
+
+    def test_footer_content_included(self):
+        result = extract_text(self.path)
+        self.assertIn("Confidential", result)
+
+    def test_header_appears_before_body(self):
+        result = extract_text(self.path)
+        self.assertLess(result.index("Jane Doe"), result.index("Summary"))
+
+    def test_footer_appears_after_body(self):
+        result = extract_text(self.path)
+        self.assertGreater(result.index("Confidential"), result.index("Summary"))
+
+
 class TestExtractPdf(unittest.TestCase):
     def setUp(self):
         self._tmpdir = tempfile.TemporaryDirectory()
@@ -206,6 +243,14 @@ class TestExtractPdf(unittest.TestCase):
         with patch("pdfplumber.open", return_value=self._mock_pdf([None, None])):
             result = extract_text(self.path)
         self.assertEqual(result, "")
+
+    def test_extract_text_called_with_tight_x_tolerance(self):
+        # Guards against pdfplumber's default x_tolerance=3 gluing adjacent
+        # words together on PDFs with tight character spacing.
+        mock_pdf = self._mock_pdf(["Jane Doe"])
+        with patch("pdfplumber.open", return_value=mock_pdf):
+            extract_text(self.path)
+        mock_pdf.pages[0].extract_text.assert_called_once_with(x_tolerance=1)
 
 
 if __name__ == "__main__":

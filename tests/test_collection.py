@@ -316,5 +316,60 @@ class TestCollectionLoadPlainText(unittest.TestCase):
         self.assertEqual(count, 2)
 
 
+# ── resume de-duplication across file-format variants ─────────────────────────
+
+class TestCollectionResumeDedup(unittest.TestCase):
+    """Two files that resolve to the same person should collapse to one record."""
+
+    def test_identical_content_dedups_by_email(self):
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            (tmp / "jane_resume_a.txt").write_text(_PLAIN_RESUME)
+            (tmp / "jane_resume_b.txt").write_text(_PLAIN_RESUME)
+            collection = ResumeCollection(tmp)
+            collection.load()
+            result = collection._repo.list_resume_summaries()
+            self.assertEqual(result.total_count, 1)
+            self.assertEqual(result.items[0]["email"], "jane@example.com")
+
+    def test_richer_copy_is_kept_over_sparser_copy(self):
+        sparse = "Jane Doe\njane@example.com\n\nSkills\nPython\n"
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            # Alphabetically first so it's parsed before the richer copy,
+            # proving the richer one wins rather than "first file loaded".
+            (tmp / "a_sparse_resume.txt").write_text(sparse)
+            (tmp / "b_full_resume.txt").write_text(_PLAIN_RESUME)
+            collection = ResumeCollection(tmp)
+            collection.load()
+            result = collection._repo.list_resume_summaries()
+            self.assertEqual(result.total_count, 1)
+            work_experiences = collection._repo.list_work_experiences()
+            self.assertEqual(work_experiences.total_count, 2)
+
+    def test_no_email_dedups_by_name(self):
+        text = "Jane Doe\n\nExperience\nAcme Corp | Engineer  Jan 2020 – Present\n" \
+               "• Built systems and infrastructure improvements across the org\n"
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            (tmp / "jane_resume_a.txt").write_text(text)
+            (tmp / "jane_resume_b.txt").write_text(text)
+            collection = ResumeCollection(tmp)
+            collection.load()
+            result = collection._repo.list_resume_summaries()
+            self.assertEqual(result.total_count, 1)
+
+    def test_distinct_people_are_not_deduped(self):
+        # Sanity check: jane and john have different emails and must both survive.
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            (tmp / "jane_resume.txt").write_text(_PLAIN_RESUME)
+            (tmp / "john_resume.txt").write_text(_PLAIN_RESUME_2)
+            collection = ResumeCollection(tmp)
+            collection.load()
+            result = collection._repo.list_resume_summaries()
+            self.assertEqual(result.total_count, 2)
+
+
 if __name__ == "__main__":
     unittest.main()

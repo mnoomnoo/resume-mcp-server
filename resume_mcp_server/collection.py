@@ -10,7 +10,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 from .extractor import extract_text
-from .models import PaginatedResponse
+from .models import PaginatedResponse, ResumeCreate
 from .parser import parse_resume
 from .repository import ResumeRepository
 
@@ -61,9 +61,27 @@ class ResumeCollection:
     _index: dict[str, tuple[ResumeMetadata, str]] = field(default_factory=dict, repr=False)
     _repo: ResumeRepository = field(default_factory=ResumeRepository, repr=False)
 
+    @staticmethod
+    def _resume_identity_key(create: ResumeCreate) -> tuple[str, ...]:
+        """Identify 'the same person' across file-format variants of a resume."""
+        if create.email:
+            return ("email", create.email.lower())
+        return ("name", create.first_name.lower(), create.last_name.lower())
+
+    @staticmethod
+    def _resume_richness(create: ResumeCreate) -> int:
+        """Rough measure of how much structured content a parsed resume has."""
+        return (
+            len(create.work_experiences)
+            + len(create.badge_skills)
+            + len(create.side_projects)
+            + len(create.education_entries)
+        )
+
     def load(self) -> int:
         self._index.clear()
         self._repo.clear()
+        pending_resumes: dict[tuple[str, ...], ResumeCreate] = {}
         for file_path in sorted(self.resume_dir.rglob("*")):
             if file_path.suffix.lower() not in SUPPORTED_EXTENSIONS:
                 continue
@@ -88,10 +106,22 @@ class ResumeCollection:
             if doc_type == "resume" and text:
                 try:
                     create = parse_resume(text, file_path.name)
-                    if create is not None:
-                        self._repo.add_resume(create)
                 except Exception as exc:
                     logger.warning("Failed to parse resume %r: %s", file_path.name, exc)
+                    continue
+                if create is None:
+                    continue
+                key = self._resume_identity_key(create)
+                existing = pending_resumes.get(key)
+                if existing is None or self._resume_richness(create) > self._resume_richness(existing):
+                    if existing is not None:
+                        logger.info(
+                            "Dropping duplicate resume for %r in favor of a richer copy",
+                            file_path.name,
+                        )
+                    pending_resumes[key] = create
+        for create in pending_resumes.values():
+            self._repo.add_resume(create)
         return len(self._index)
 
     def list_all(self, doc_type: str | None = None) -> list[ResumeMetadata]:
