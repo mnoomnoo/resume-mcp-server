@@ -432,6 +432,55 @@ Python, Go
         self.assertEqual(result.work_experiences, [])
         self.assertGreaterEqual(len(result.badge_skills), 1)
 
+    def test_unfilled_template_returns_none(self):
+        text = """\
+[Your Name]
+[Email] | [Phone] | [LinkedIn] | [GitHub]
+
+Summary
+Experienced software engineer.
+
+Skills
+Python, Go
+"""
+        result = parse_resume(text, "resume_anthropic.md")
+        self.assertIsNone(result)
+
+    def test_unbracketed_placeholder_name_and_email_returns_none(self):
+        text = """\
+Your Name
+your.email@email.com  |  (555) 555-5555  |  linkedin.com/in/yourprofile
+
+Summary
+Software engineer with 12 years of experience.
+
+Skills
+Python, C++
+"""
+        result = parse_resume(text, "resume_avride_motionplanning.docx")
+        self.assertIsNone(result)
+
+    def test_filename_fallback_rejects_generic_token(self):
+        text = """\
+Skills
+Python, Go, Rust
+"""
+        result = parse_resume(text, "resume.md")
+        self.assertIsNone(result)
+
+    def test_filename_fallback_accepts_real_name_token(self):
+        text = """\
+Experience
+Acme Corp | Engineer  Jan 2020 – Present
+• Built systems and infrastructure improvements across the organization
+
+Skills
+Python
+"""
+        result = parse_resume(text, "jane_doe_resume.docx")
+        self.assertIsNotNone(result)
+        self.assertEqual(result.first_name.lower(), "jane")
+
     def test_professional_statement_from_summary(self):
         text = """\
 Jane Doe

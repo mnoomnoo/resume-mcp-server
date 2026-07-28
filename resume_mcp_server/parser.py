@@ -56,6 +56,19 @@ _BULLETS = "•·▪▸◦✓—–"
 _COURSEWORK_RE = re.compile(r"^(?:relevant\s+)?coursework:?\s*(.*)$", re.IGNORECASE)
 _YEAR_RE = re.compile(r"^\d{4}$|^present$", re.IGNORECASE)
 
+# Bracketed placeholder markers like "[Your Name]" or "[Email]" indicate an
+# unfilled template rather than a real, personalized resume.
+_PLACEHOLDER_RE = re.compile(r"\[[A-Za-z][A-Za-z ]{1,30}\]")
+
+# Un-bracketed template placeholders that show up literally in "fill in the
+# blank" style templates (e.g. "Your Name" / "your.email@email.com").
+_PLACEHOLDER_NAME_RE = re.compile(r"^your\s+name$", re.IGNORECASE)
+_PLACEHOLDER_EMAIL_RE = re.compile(r"^your\.?e-?mail@", re.IGNORECASE)
+
+# Words that indicate the filename-stem fallback (below) produced a
+# document-type label rather than an actual person's name.
+_GENERIC_NAME_TOKENS = {"resume", "cv", "template", "sample", "draft", "blank", "form"}
+
 
 # ── Section splitting ─────────────────────────────────────────────────────────
 
@@ -407,11 +420,25 @@ def parse_resume(text: str, filename: str) -> ResumeCreate | None:
     # Contact info
     first_name, last_name, email, phone_num, address = _extract_contact(lines)
 
+    # Literal (non-bracketed) template placeholders, e.g. "Your Name" /
+    # "your.email@email.com", are just as clear a template signal as
+    # bracketed ones and should be treated as "not actually found".
+    if _PLACEHOLDER_NAME_RE.match(f"{first_name} {last_name}".strip()):
+        first_name = last_name = ""
+    if email and _PLACEHOLDER_EMAIL_RE.match(email):
+        email = ""
+
     # Fall back to filename stem if no name found
     if not first_name:
+        # Bracketed placeholders near the top of the document (e.g. "[Your
+        # Name]", "[Email]") are an unambiguous sign of an unfilled template.
+        if any(_PLACEHOLDER_RE.search(l) for l in lines[:10]):
+            return None
         stem = Path(filename).stem
         parts = re.split(r"[_\s-]+", stem)
-        first_name = parts[0].capitalize() if parts else stem
+        candidate = parts[0].capitalize() if parts else stem
+        if candidate.lower() not in _GENERIC_NAME_TOKENS:
+            first_name = candidate
 
     # Section detection
     sections = _find_sections(lines)
@@ -431,6 +458,11 @@ def parse_resume(text: str, filename: str) -> ResumeCreate | None:
 
     # Side projects
     side_projects = _parse_projects(sections.get("projects", []))
+
+    # No identity signal at all (no email, no last name, no usable name) means
+    # this is very likely a non-personalized file, not a real candidate resume.
+    if not email and not last_name and not first_name:
+        return None
 
     return ResumeCreate(
         first_name=first_name,

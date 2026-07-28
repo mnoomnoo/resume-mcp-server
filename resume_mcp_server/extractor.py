@@ -17,6 +17,10 @@ def _extract_docx(path: Path) -> str:
 
     doc = docx.Document(str(path))
     parts: list[str] = []
+    for section in doc.sections:
+        for para in section.header.paragraphs:
+            if para.text.strip():
+                parts.append(para.text)
     for para in doc.paragraphs:
         if para.text.strip():
             parts.append(para.text)
@@ -25,6 +29,10 @@ def _extract_docx(path: Path) -> str:
             row_text = "  ".join(cell.text.strip() for cell in row.cells if cell.text.strip())
             if row_text:
                 parts.append(row_text)
+    for section in doc.sections:
+        for para in section.footer.paragraphs:
+            if para.text.strip():
+                parts.append(para.text)
     return "\n".join(parts)
 
 
@@ -34,7 +42,9 @@ def _extract_pdf(path: Path) -> str:
     parts: list[str] = []
     with pdfplumber.open(str(path)) as pdf:
         for page in pdf.pages:
-            text = page.extract_text()
+            # Lower x_tolerance (pdfplumber default is 3) to avoid gluing
+            # adjacent words together when a PDF's character spacing is tight.
+            text = page.extract_text(x_tolerance=1)
             if text:
                 parts.append(text)
     return "\n".join(parts)
