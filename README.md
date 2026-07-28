@@ -18,6 +18,7 @@ The server parses each document into structured data (contact info, work history
 ## Features
 
 - **Multi-format parsing** — `.docx`, `.pdf`, `.md`, and `.txt` documents are parsed into structured data: contact info, work history, education, skills, and side projects.
+- **Automatic de-duplication** — resumes for the same person across multiple files (e.g. a `.docx` and a `.pdf` of the same resume) are matched by email or name and collapsed to the richest copy, so search and analytics aren't skewed by duplicates.
 - **Automatic hot-reload** — a filesystem watcher re-indexes your documents as soon as they change, no server restart needed.
 - **Document type inference** — files are automatically classified as `resume`, `cover_letter`, `application_material`, or `other` based on filename patterns, which can be overridden per category via environment variables.
 - **Full-text and structured search** — search whole documents with `search_resumes`, or filter any entity type (skills, work experience, achievements, side projects, education) with a scoped `query`, `technology`, or `competency` parameter.

@@ -27,14 +27,28 @@ Anything outside a recognized section (or before the first one) isn't attributed
 Put your name, email, phone, and location together near the top of the document, each on **its own line** where possible.
 
 - **Email/phone** are matched anywhere by regex, so these are the most reliable fields.
-- **Name** is detected as a capitalized 2-4 word line near the email/phone line that isn't a section header, date range, email/phone itself, or a line containing job-title words (engineer, manager, director, etc.). If no name is found this way, the first word of the *filename* is used as a fallback first name.
+- **Name** is detected as a capitalized 2-4 word line near the email/phone line that isn't a section header, date range, email/phone itself, or a line containing job-title words (engineer, manager, director, etc.). If no name is found this way, the first word of the *filename* is used as a fallback first name — unless that word is a generic document-type token (`resume`, `cv`, `template`, `sample`, `draft`, `blank`, `form`), in which case no fallback name is used.
 - **Address** is detected as a `City, ST` pattern near the email/phone — **but only on a line that doesn't also contain the email or phone number.** Putting `email | phone | City, ST` all on one line (a common resume header style) will cause the address to be dropped. Put location on its own line if you want it captured.
+- Literal, unfilled template placeholders — a name of exactly "Your Name", or an email starting with `your.email@`/`youremail@` — are treated as not found, the same as if nothing had matched.
 
 ```
 Jane Doe
 jane.doe@email.com | (555) 123-4567
 San Francisco, CA
 ```
+
+### Unfilled templates are skipped
+
+A document is treated as an unfilled template — and gets **no structured resume record** (it's excluded from `get_resume_profile`, work/skill/education search, collection stats, etc.) — when either:
+
+- a bracketed placeholder like `[Your Name]` or `[Email]` appears in the first 10 lines and no real name was otherwise found, or
+- no identity signal at all is found (no email, no last name, and no first name).
+
+The raw text is still indexed and searchable via `search_resumes`/`get_resume` either way — only the structured record is skipped.
+
+### Duplicate resumes are collapsed
+
+If multiple files resolve to the same person (matched by email, or by first+last name when there's no email), only the copy with the most structured content (most work experiences, skills, side projects, and education entries combined) is kept as that person's resume — for example, if you keep both a `.docx` and a `.pdf` of the same resume, only one shows up in search/analytics. Every file's raw text remains searchable regardless.
 
 ---
 
@@ -134,7 +148,7 @@ MS Computer Science, Portland State University, 2020
 
 | Extension | Extraction method | Notes |
 |---|---|---|
-| `.docx` | Paragraph text + table cell text (`python-docx`) | Tables are flattened into rows of tab-separated cell text |
+| `.docx` | Paragraph text + table cell text + header/footer text (`python-docx`) | Tables are flattened into rows of tab-separated cell text |
 | `.pdf` | Page text extraction (`pdfplumber`) | Scanned/image-only PDFs have no extractable text and won't parse — use a text-based PDF or convert to `.docx`/`.md` |
 | `.md` / `.txt` | Raw file read | Leading `#`/`##` Markdown headers are stripped before section matching, so `## Experience` and `Experience` are equivalent |
 
@@ -146,3 +160,4 @@ MS Computer Science, Portland State University, 2020
 - **`work_experiences` is empty** — the most common cause is a date range that isn't on the same line as the company/title (see [Work experience](#work-experience) above).
 - **Address missing** — check whether it's on the same line as your email or phone; move it to its own line.
 - **A job title has a stray trailing `|`** — you likely have `Company | Title | Date` on one line; drop the second `|` and separate the date with whitespace instead.
+- **A resume doesn't show up in `get_resume_profile` or structured search at all** — either it was detected as an unfilled template (see [Unfilled templates are skipped](#unfilled-templates-are-skipped)) or it was treated as a duplicate of a richer file for the same person (see [Duplicate resumes are collapsed](#duplicate-resumes-are-collapsed)). The raw text is still searchable via `search_resumes`/`get_resume` in both cases.
