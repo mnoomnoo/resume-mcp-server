@@ -94,6 +94,18 @@ class TestComputeSkillsScore(unittest.TestCase):
         result = compute_skills_score(["Python"], "Python expert needed with Terraform skills")
         self.assertTrue(any("terraform" in m for m in result.missing))
 
+    def test_missing_excludes_generic_job_posting_words(self):
+        jd = (
+            "Senior Backend Engineer. We are looking for a Senior Backend Engineer "
+            "with strong experience in Python and distributed systems. You will "
+            "lead a small team and mentor junior engineers."
+        )
+        result = compute_skills_score(["Python"], jd)
+        for generic in ("senior", "engineer", "engineers", "experience", "looking",
+                        "strong", "lead", "mentor", "team", "small", "big"):
+            self.assertNotIn(generic, result.missing)
+        self.assertIn("distributed", result.missing)
+
 
 class TestComputeKeywordScore(unittest.TestCase):
     def test_full_overlap(self):

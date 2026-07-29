@@ -59,6 +59,28 @@ mustn't let's that's who's what's here's there's when's where's why's how's
 etc within per via using use used also may might must shall
 """.split())
 
+# ── Generic job-posting words: common boilerplate in postings but not skills
+#    (seniority, soft-skill filler, "we're hiring" phrasing). Excluded only
+#    from missing_skills detection — keyword_score stays broader by design —
+#    so a JD's "senior"/"looking"/"strong experience" filler doesn't get
+#    reported as a skill gap alongside real ones like "ci/cd pipelines". ────
+GENERIC_JOB_WORDS = frozenset("""
+senior junior lead leading leadership principal staff mid entry level
+engineer engineers engineering developer developers development
+manager managers management mentor mentors mentoring
+experience experienced looking strong solid proven demonstrated big small
+required requirement requirements responsibility responsibilities
+qualification qualifications preferred bonus nice ideal candidate
+candidates role roles team teams year years plus ability abilities
+knowledge background skill skills proficiency proficient familiarity
+familiar excellent outstanding great good communication collaborate
+collaborative environment opportunity opportunities join growing
+company organization apply application applicants work working
+works build building built create creating help helping ensure
+ensuring drive driving deliver delivering own owning across
+balance benefits compensation salary
+""".split())
+
 # ── Alias groups: bridges abbreviation/format variants pure fuzzy matching
 #    can't reach (e.g. "js" vs "javascript" share almost no characters).
 #    Curated, extensible via ATS_EXTRA_ALIAS_GROUPS — not a general
@@ -133,19 +155,20 @@ def _ngrams(tokens: list[str], n: int) -> list[str]:
 
 
 def _candidate_phrases(text: str, max_results: int = 40) -> list[str]:
-    """Unigrams + bigrams built from significant (non-stopword) words, ranked
+    """Unigrams + bigrams built from significant, non-generic words, ranked
     by frequency — used as the job-description 'significant phrase' pool for
     missing-skill detection."""
     tokens = _tokenize(text)
+    excluded = STOPWORDS | GENERIC_JOB_WORDS
     counts: Counter[str] = Counter()
     order: list[str] = []
     for i, tok in enumerate(tokens):
-        if tok in STOPWORDS or len(tok) < 2:
+        if tok in excluded or len(tok) < 2:
             continue
         if tok not in counts:
             order.append(tok)
         counts[tok] += 1
-        if i + 1 < len(tokens) and tokens[i + 1] not in STOPWORDS:
+        if i + 1 < len(tokens) and tokens[i + 1] not in excluded:
             bigram = f"{tok} {tokens[i + 1]}"
             if bigram not in counts:
                 order.append(bigram)
