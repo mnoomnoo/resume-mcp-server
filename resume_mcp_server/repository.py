@@ -9,6 +9,9 @@ from .models import (
     BadgeSkillResponse, AchievementResponse, WorkExperienceResponse, SideProjectResponse, EducationResponse, ResumeResponse,
     CollectionStatsResponse, SkillFrequencyItem, PaginatedResponse, MAX_PAGE_LIMIT,
 )
+from .scoring import (
+    score_resume, DEFAULT_SKILL_MATCH_THRESHOLD, DEFAULT_SKILLS_WEIGHT, DEFAULT_KEYWORD_WEIGHT,
+)
 
 
 def _make_matcher(query: str, mode: str = "and"):
@@ -532,5 +535,60 @@ class ResumeRepository:
                     "last_name": r.last_name,
                     "matched_skills": matched_titles,
                 })
+        return PaginatedResponse.paginate(results, offset, limit)
+
+    def _build_resume_text(self, resume: ResumeModel) -> str:
+        parts = [resume.professional_statement, resume.education]
+        for we_id in resume.work_experiences:
+            we = self._work_experiences_by_id.get(we_id)
+            if we is None:
+                continue
+            parts.append(we.company_name)
+            parts.append(we.position_title)
+            for ach_id in we.achievements:
+                ach = self._achievements_by_id.get(ach_id)
+                if ach is not None:
+                    parts.append(ach.desc)
+        return "\n".join(p for p in parts if p)
+
+    def list_ranked_resumes(
+        self, job_description: str, limit: int = 25, offset: int = 0,
+        skill_match_threshold: int | None = None,
+        skills_weight: float | None = None,
+        keyword_weight: float | None = None,
+    ) -> PaginatedResponse:
+        if not job_description or not job_description.strip():
+            raise ValueError("job_description must not be empty")
+        threshold = DEFAULT_SKILL_MATCH_THRESHOLD if skill_match_threshold is None else skill_match_threshold
+        if not (0 <= threshold <= 100):
+            raise ValueError(f"skill_match_threshold must be between 0 and 100, got {threshold}")
+        s_weight = DEFAULT_SKILLS_WEIGHT if skills_weight is None else skills_weight
+        k_weight = DEFAULT_KEYWORD_WEIGHT if keyword_weight is None else keyword_weight
+        if s_weight < 0 or k_weight < 0:
+            raise ValueError(f"skills_weight and keyword_weight must be >= 0, got {s_weight} and {k_weight}")
+
+        results = []
+        for r in self._resumes:
+            skill_titles = [
+                self._badge_skills_by_id[sid].title
+                for sid in r.badge_skills
+                if sid in self._badge_skills_by_id
+            ]
+            resume_text = self._build_resume_text(r)
+            result = score_resume(
+                skill_titles, resume_text, job_description,
+                threshold=threshold, skills_weight=s_weight, keyword_weight=k_weight,
+            )
+            results.append({
+                "id": r.id,
+                "first_name": r.first_name,
+                "last_name": r.last_name,
+                "overall_score": result.overall_score,
+                "skills_score": result.skills.score,
+                "keyword_score": result.keywords.score,
+                "matched_skills": result.skills.matched,
+                "missing_skills": result.skills.missing,
+            })
+        results.sort(key=lambda item: item["overall_score"], reverse=True)
         return PaginatedResponse.paginate(results, offset, limit)
 

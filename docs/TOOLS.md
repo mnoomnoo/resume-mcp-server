@@ -1,6 +1,6 @@
 # MCP Tools Reference
 
-Full parameter and return-shape reference for all 19 tools exposed by `resume-mcp-server`. All tools that accept a `mode` parameter share the same match-mode conventions: see [Search behavior](../README.md#search-behavior) in the main README. All `list_*` tools share the same pagination envelope and validation — see [Pagination](../README.md#pagination). Every tool's failure shape is `{"error": "..."}` — see [Error handling](../README.md#error-handling). Every tool is read-only (annotated `readOnlyHint: true`, `idempotentHint: true`, `openWorldHint: false`) — safe to call freely, no confirmation needed.
+Full parameter and return-shape reference for all 20 tools exposed by `resume-mcp-server`. All tools that accept a `mode` parameter share the same match-mode conventions: see [Search behavior](../README.md#search-behavior) in the main README. All `list_*` tools share the same pagination envelope and validation — see [Pagination](../README.md#pagination). Every tool's failure shape is `{"error": "..."}` — see [Error handling](../README.md#error-handling). Every tool is read-only (annotated `readOnlyHint: true`, `idempotentHint: true`, `openWorldHint: false`) — safe to call freely, no confirmation needed.
 
 ### `list_resume_summaries`
 
@@ -137,6 +137,33 @@ Return badge skills ranked by how many resumes list them, in descending order. U
 | `limit` | integer (optional) | Maximum number of skills to return (default `20`) |
 
 Returns: list of `{ skill_id, skill_title, resume_count }`.
+
+---
+
+### `list_ranked_resumes`
+
+Rank every resume in the collection by how well it matches a pasted job description — a lightweight ATS-style match check, best match first.
+
+Combines two signals into `overall_score` for each resume:
+- `skills_score`: fraction of the resume's badge skills that are (fuzzy-)mentioned in the job description. Fuzzy matching (via [rapidfuzz](https://github.com/rapidfuzz/RapidFuzz)) catches format variants that plain substring matching would miss, e.g. `"JS"`/`"JavaScript"`, `"k8s"`/`"Kubernetes"`, `"Postgres"`/`"PostgreSQL"` — see the curated alias list and `ATS_EXTRA_ALIAS_GROUPS` below.
+- `keyword_score`: broader overlap between significant job-description keywords and the resume's full text (professional statement, education, and work experience — company, position, and achievement text), after basic English stopword filtering.
+
+`overall_score` defaults to a 60/40 weighted blend of `skills_score` and `keyword_score` (skills weighted higher as a more precise, curated signal). All three scores are `0-100`.
+
+Every parameter beyond `job_description`, `limit`, and `offset` is optional and overridable per call — useful for firing off a few searches at different strictness levels without restarting the server:
+
+| Parameter | Type | Description |
+|---|---|---|
+| `job_description` | string | Full text of the job description to rank resumes against |
+| `limit` | integer (optional) | Maximum number of results (default `25`) |
+| `offset` | integer (optional) | Number of results to skip (default `0`) |
+| `skill_match_threshold` | integer (optional) | rapidfuzz `token_set_ratio` cutoff, `0-100` (default `85`, or `ATS_SKILL_MATCH_THRESHOLD`) — lower is looser matching |
+| `skills_weight` | float (optional) | Weight of `skills_score` in `overall_score` (default `0.6`, or `ATS_SKILLS_WEIGHT`) |
+| `keyword_weight` | float (optional) | Weight of `keyword_score` in `overall_score` (default `0.4`, or `ATS_KEYWORD_WEIGHT`) |
+
+Returns: paginated envelope — `total_count` + `items` sorted by `overall_score` descending, where each item has `id`, `first_name`, `last_name`, `overall_score`, `skills_score`, `keyword_score`, `matched_skills` (resume skills found in the job description), and `missing_skills` (significant job-description terms not covered by any resume skill). `{"error": "..."}` if `job_description` is empty, or if `skill_match_threshold`/weights are out of range.
+
+**Configuration**: the built-in alias list (`js`/`javascript`, `k8s`/`kubernetes`, `ml`/`machine learning`, etc.) can be extended via the `ATS_EXTRA_ALIAS_GROUPS` environment variable — a JSON array of arrays of lowercase strings, e.g. `[["gpt","llm"],["tf","tensorflow"]]`, merged additively on top of the built-ins at server startup. See `.env.example`.
 
 ---
 
