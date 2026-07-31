@@ -154,6 +154,18 @@ def _ngrams(tokens: list[str], n: int) -> list[str]:
     return [" ".join(tokens[i:i + n]) for i in range(len(tokens) - n + 1)]
 
 
+def _phrase_in_tokens(phrase_tokens: list[str], tokens: list[str]) -> bool:
+    """True if phrase_tokens appears as a contiguous n-gram within tokens.
+
+    Word-boundary-aware, unlike a raw substring check — a skill titled "R" or
+    "C" must not match merely because that letter appears inside an unrelated
+    word like "marketer" or "communication"."""
+    n = len(phrase_tokens)
+    if n == 0 or n > len(tokens):
+        return False
+    return " ".join(phrase_tokens) in _ngrams(tokens, n)
+
+
 def _candidate_phrases(text: str, max_results: int = 40) -> list[str]:
     """Unigrams + bigrams built from significant, non-generic words, ranked
     by frequency — used as the job-description 'significant phrase' pool for
@@ -207,13 +219,12 @@ def compute_skills_score(
     threshold: int = DEFAULT_SKILL_MATCH_THRESHOLD,
 ) -> SkillsScoreResult:
     jd_tokens = _tokenize(job_description)
-    jd_lower = job_description.lower()
     matched: list[str] = []
     for title in skill_titles:
         title_words = _tokenize(title)
         if not title_words:
             continue
-        if title.lower() in jd_lower:
+        if _phrase_in_tokens(title_words, jd_tokens):
             matched.append(title)
             continue
         n = len(title_words)
@@ -235,15 +246,20 @@ def compute_skills_score(
     missing_from_jd: list[str] = []
     for cand in _candidate_phrases(job_description):
         canon_cand = _canonical_phrase(cand)
+        cand_tokens = cand.split()
         hit = any(
-            cand in t.lower() or t.lower() in cand
+            _phrase_in_tokens(cand_tokens, _tokenize(t)) or _phrase_in_tokens(_tokenize(t), cand_tokens)
             or fuzz.token_set_ratio(canon_cand, _canonical_phrase(t)) >= threshold
             for t in skill_titles
         )
         if not hit:
             missing_from_jd.append(cand)
-        if len(missing_from_jd) >= MAX_MISSING_SKILLS:
-            break
+
+    # Prefer a bigram over its constituent unigram when both are missing —
+    # e.g. list "distributed systems" instead of both it and bare "distributed".
+    bigram_words = {w for phrase in missing_from_jd if " " in phrase for w in phrase.split()}
+    missing_from_jd = [p for p in missing_from_jd if " " in p or p not in bigram_words]
+    missing_from_jd = missing_from_jd[:MAX_MISSING_SKILLS]
 
     return SkillsScoreResult(
         score=score, matched=matched, missing=missing_from_jd,

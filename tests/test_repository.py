@@ -1437,6 +1437,11 @@ class TestListRankedResumes(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.repo.list_ranked_resumes("Python developer", keyword_weight=-0.1)
 
+    def test_zero_weight_sum_raises(self):
+        self.repo.add_resume(_make_resume(skills=["Python"]))
+        with self.assertRaises(ValueError):
+            self.repo.list_ranked_resumes("Python developer", skills_weight=0, keyword_weight=0)
+
     def test_empty_collection_returns_empty_not_error(self):
         result = self.repo.list_ranked_resumes("Python developer")
         self.assertEqual(result.items, [])

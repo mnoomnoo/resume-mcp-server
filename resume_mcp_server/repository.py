@@ -566,6 +566,8 @@ class ResumeRepository:
         k_weight = DEFAULT_KEYWORD_WEIGHT if keyword_weight is None else keyword_weight
         if s_weight < 0 or k_weight < 0:
             raise ValueError(f"skills_weight and keyword_weight must be >= 0, got {s_weight} and {k_weight}")
+        if s_weight == 0 and k_weight == 0:
+            raise ValueError("skills_weight and keyword_weight must not both be 0")
 
         results = []
         for r in self._resumes:

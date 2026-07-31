@@ -536,8 +536,8 @@ def list_ranked_resumes(job_description: str, limit: int = 25, offset: int = 0,
     job-description terms not covered by any resume skill). Results are sorted by overall_score
     descending. Response includes total_count, items, has_more, next_offset, and message for
     pagination.
-    Returns {"error": ...} if job_description is empty, or if skill_match_threshold/weights are
-    out of range.
+    Returns {"error": ...} if job_description is empty, if skill_match_threshold/weights are out
+    of range, or if skills_weight and keyword_weight are both 0.
 
     Args:
         job_description: Full text of the job description to rank resumes against

@@ -94,6 +94,32 @@ class TestComputeSkillsScore(unittest.TestCase):
         result = compute_skills_score(["Python"], "Python expert needed with Terraform skills")
         self.assertTrue(any("terraform" in m for m in result.missing))
 
+    def test_short_skill_title_does_not_false_positive_on_substring(self):
+        result_r = compute_skills_score(["R"], "We need a strong marketer for our growing team.")
+        self.assertEqual(result_r.matched, [])
+        result_c = compute_skills_score(["C"], "Excellent communication skills required.")
+        self.assertEqual(result_c.matched, [])
+
+    def test_short_skill_title_still_matches_when_actually_present(self):
+        result = compute_skills_score(["R"], "Experience with R and Python for data analysis")
+        self.assertEqual(result.matched, ["R"])
+
+    def test_missing_skills_not_masked_by_unrelated_short_skill(self):
+        result = compute_skills_score(
+            ["R"], "Looking for a Terraform expert to join our growing team."
+        )
+        self.assertEqual(result.matched, [])
+        self.assertTrue(any("terraform" in m for m in result.missing))
+
+    def test_missing_skills_deduplicates_unigram_when_bigram_present(self):
+        jd = (
+            "We are hiring a backend engineer to build distributed systems in Go, "
+            "manage Kubernetes clusters, and own our CI/CD pipeline."
+        )
+        result = compute_skills_score(["Python"], jd)
+        self.assertIn("distributed systems", result.missing)
+        self.assertNotIn("distributed", result.missing)
+
     def test_missing_excludes_generic_job_posting_words(self):
         jd = (
             "Senior Backend Engineer. We are looking for a Senior Backend Engineer "
@@ -104,7 +130,9 @@ class TestComputeSkillsScore(unittest.TestCase):
         for generic in ("senior", "engineer", "engineers", "experience", "looking",
                         "strong", "lead", "mentor", "team", "small", "big"):
             self.assertNotIn(generic, result.missing)
-        self.assertIn("distributed", result.missing)
+        # "distributed systems" (the bigram) is preferred over the bare "distributed"
+        # unigram — see test_missing_skills_deduplicates_unigram_when_bigram_present.
+        self.assertIn("distributed systems", result.missing)
 
 
 class TestComputeKeywordScore(unittest.TestCase):
