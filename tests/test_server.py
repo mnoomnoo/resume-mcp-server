@@ -20,6 +20,7 @@ from resume_mcp_server.server import (
     get_work_experience,
     list_achievements,
     list_education,
+    list_ranked_resumes,
     list_resume_summaries,
     list_resumes,
     list_side_projects,
@@ -132,6 +133,10 @@ class TestServerUninitialised(unittest.TestCase):
     def test_list_resumes_raises(self):
         with self.assertRaises(RuntimeError):
             list_resumes()
+
+    def test_list_ranked_resumes_raises(self):
+        with self.assertRaises(RuntimeError):
+            list_ranked_resumes("Python developer")
 
     def test_get_resume_raises(self):
         with self.assertRaises(RuntimeError):
@@ -1074,6 +1079,91 @@ class TestGetSkillFrequency(_ServerFixture):
         json.dumps(get_skill_frequency())
 
 
+class TestListRankedResumes(_ServerFixture):
+    def test_matching_jd_ranks_jane_well(self):
+        jd = (
+            "Looking for a staff software engineer with experience in Python, "
+            "distributed systems, and Kubernetes."
+        )
+        results = list_ranked_resumes(jd)["items"]
+        jane = next(r for r in results if r["first_name"] == "Jane")
+        self.assertGreater(jane["overall_score"], 30)
+        self.assertIn("Python", jane["matched_skills"])
+
+    def test_unrelated_jd_scores_low(self):
+        jd = "Seeking a graphic designer skilled in Adobe Photoshop and Illustrator."
+        results = list_ranked_resumes(jd)["items"]
+        for r in results:
+            self.assertLess(r["overall_score"], 40)
+
+    def test_fuzzy_synonym_match_end_to_end(self):
+        jd = "Strong experience with k8s required for this backend role."
+        results = list_ranked_resumes(jd)["items"]
+        matched = {s for r in results for s in r["matched_skills"]}
+        self.assertIn("Kubernetes", matched)
+
+    def test_missing_job_description_returns_error(self):
+        self.assertIn("error", list_ranked_resumes(""))
+
+    def test_whitespace_job_description_returns_error(self):
+        self.assertIn("error", list_ranked_resumes("   "))
+
+    def test_results_sorted_descending(self):
+        results = list_ranked_resumes("Python Kubernetes Docker engineer")["items"]
+        scores = [r["overall_score"] for r in results]
+        self.assertEqual(scores, sorted(scores, reverse=True))
+
+    def test_result_is_serialisable(self):
+        import json
+        json.dumps(list_ranked_resumes("Python developer"))
+
+
+_SNOWFLAKE_RESUME = """\
+Sam Snow
+Denver, CO
+sam.snow@example.com
+303-555-0000
+
+Summary
+Data engineer specializing in cloud data warehousing.
+
+Experience
+DataCo | Data Engineer  Jan 2020 – Present
+• Built ETL pipelines feeding a Snowflake data warehouse
+
+Skills
+Snowflake, SQL, Airflow
+
+Education
+BS Data Science, Colorado State University, 2019
+"""
+
+
+class TestListRankedResumesThreshold(unittest.TestCase):
+    """A strict skill_match_threshold should reject a near-miss typo that a
+    loose threshold would fuzzy-match (end-to-end through the MCP tool)."""
+
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        tmp = Path(self._tmpdir.name)
+        (tmp / "sam_resume.txt").write_text(_SNOWFLAKE_RESUME)
+        collection = ResumeCollection(tmp)
+        collection.load()
+        self._orig = _srv._collection
+        _srv._collection = collection
+
+    def tearDown(self):
+        _srv._collection = self._orig
+        self._tmpdir.cleanup()
+
+    def test_strict_threshold_removes_fuzzy_match(self):
+        jd = "We use Snowflaek for our data warehouse."
+        loose = list_ranked_resumes(jd, skill_match_threshold=50)["items"]
+        strict = list_ranked_resumes(jd, skill_match_threshold=95)["items"]
+        self.assertIn("Snowflake", loose[0]["matched_skills"])
+        self.assertNotIn("Snowflake", strict[0]["matched_skills"])
+
+
 class TestSearchResumesBySkillList(_ServerFixture):
     """search_resumes_by_skill also accepts a list of skills (merged from the former
     search_resumes_by_skills tool)."""
@@ -1232,6 +1322,7 @@ class TestToolRegistration(unittest.TestCase):
         "list_side_projects", "get_side_project",
         "list_education", "get_education",
         "get_collection_stats",
+        "list_ranked_resumes",
     }
 
     def test_exact_tool_set(self):

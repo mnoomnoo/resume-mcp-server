@@ -1407,6 +1407,112 @@ class TestSearchResumesBySkillList(unittest.TestCase):
         self.assertEqual({r["id"] for r in results}, {resp_a.id, resp_b.id})
 
 
+# ── ranked resumes (ATS-style job-match scoring) ────────────────────────────────
+
+class TestListRankedResumes(unittest.TestCase):
+    def setUp(self):
+        self.repo = ResumeRepository()
+
+    def test_empty_job_description_raises(self):
+        self.repo.add_resume(_make_resume(skills=["Python"]))
+        with self.assertRaises(ValueError):
+            self.repo.list_ranked_resumes("")
+
+    def test_whitespace_job_description_raises(self):
+        self.repo.add_resume(_make_resume(skills=["Python"]))
+        with self.assertRaises(ValueError):
+            self.repo.list_ranked_resumes("   \n\t  ")
+
+    def test_out_of_range_threshold_raises(self):
+        self.repo.add_resume(_make_resume(skills=["Python"]))
+        with self.assertRaises(ValueError):
+            self.repo.list_ranked_resumes("Python developer", skill_match_threshold=150)
+        with self.assertRaises(ValueError):
+            self.repo.list_ranked_resumes("Python developer", skill_match_threshold=-1)
+
+    def test_negative_weights_raise(self):
+        self.repo.add_resume(_make_resume(skills=["Python"]))
+        with self.assertRaises(ValueError):
+            self.repo.list_ranked_resumes("Python developer", skills_weight=-0.1)
+        with self.assertRaises(ValueError):
+            self.repo.list_ranked_resumes("Python developer", keyword_weight=-0.1)
+
+    def test_zero_weight_sum_raises(self):
+        self.repo.add_resume(_make_resume(skills=["Python"]))
+        with self.assertRaises(ValueError):
+            self.repo.list_ranked_resumes("Python developer", skills_weight=0, keyword_weight=0)
+
+    def test_empty_collection_returns_empty_not_error(self):
+        result = self.repo.list_ranked_resumes("Python developer")
+        self.assertEqual(result.items, [])
+        self.assertEqual(result.total_count, 0)
+
+    def test_better_match_ranks_first(self):
+        weak = self.repo.add_resume(_make_resume("Weak", "Match", skills=["Photoshop"]))
+        strong = self.repo.add_resume(_make_resume(
+            "Strong", "Match", skills=["Python", "Kubernetes", "Docker"],
+        ))
+        jd = "Looking for a backend engineer with Python, Kubernetes, and Docker experience."
+        results = self.repo.list_ranked_resumes(jd).items
+        self.assertEqual(len(results), 2)
+        self.assertEqual(results[0]["id"], strong.id)
+        self.assertEqual(results[1]["id"], weak.id)
+        self.assertGreater(results[0]["overall_score"], results[1]["overall_score"])
+
+    def test_result_shape(self):
+        self.repo.add_resume(_make_resume(skills=["Python"]))
+        results = self.repo.list_ranked_resumes("Python developer").items
+        self.assertEqual(len(results), 1)
+        self.assertEqual(
+            set(results[0].keys()),
+            {"id", "first_name", "last_name", "overall_score", "skills_score",
+             "keyword_score", "matched_skills", "missing_skills"},
+        )
+
+    def test_matched_skills_reflects_job_description(self):
+        self.repo.add_resume(_make_resume(skills=["Python", "Rust"]))
+        results = self.repo.list_ranked_resumes("Seeking a Python expert").items
+        self.assertIn("Python", results[0]["matched_skills"])
+        self.assertNotIn("Rust", results[0]["matched_skills"])
+
+    def test_missing_skills_reflects_uncovered_jd_terms(self):
+        self.repo.add_resume(_make_resume(skills=["Python"]))
+        results = self.repo.list_ranked_resumes(
+            "Seeking a Python expert with strong Terraform experience"
+        ).items
+        self.assertTrue(any("terraform" in m for m in results[0]["missing_skills"]))
+
+    def test_explicit_threshold_changes_fuzzy_match_outcome(self):
+        # A near-miss typo (not an alias pair, so canonicalization doesn't force
+        # an exact match) — loose threshold catches it, strict threshold doesn't.
+        self.repo.add_resume(_make_resume(skills=["Snowflake"]))
+        jd = "We use Snowflaek for our data warehouse."
+        loose = self.repo.list_ranked_resumes(jd, skill_match_threshold=50).items
+        strict = self.repo.list_ranked_resumes(jd, skill_match_threshold=95).items
+        self.assertIn("Snowflake", loose[0]["matched_skills"])
+        self.assertNotIn("Snowflake", strict[0]["matched_skills"])
+
+    def test_explicit_weights_change_overall_score(self):
+        self.repo.add_resume(_make_resume(skills=["Python"]))
+        jd = "Python developer needed for an unrelated codebase full of other jargon."
+        all_skills = self.repo.list_ranked_resumes(
+            jd, skills_weight=1.0, keyword_weight=0.0,
+        ).items[0]
+        all_keywords = self.repo.list_ranked_resumes(
+            jd, skills_weight=0.0, keyword_weight=1.0,
+        ).items[0]
+        self.assertEqual(all_skills["overall_score"], all_skills["skills_score"])
+        self.assertEqual(all_keywords["overall_score"], all_keywords["keyword_score"])
+
+    def test_pagination_applies_after_ranking(self):
+        for i in range(5):
+            self.repo.add_resume(_make_resume(f"Person{i}", "X", skills=["Python"]))
+        page = self.repo.list_ranked_resumes("Python developer", limit=2, offset=0)
+        self.assertEqual(len(page.items), 2)
+        self.assertEqual(page.total_count, 5)
+        self.assertTrue(page.has_more)
+
+
 # ── pagination ────────────────────────────────────────────────────────────────
 
 class TestPagination(unittest.TestCase):

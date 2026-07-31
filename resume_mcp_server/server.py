@@ -506,6 +506,53 @@ def get_skill_frequency(limit: int = 20) -> list[dict[str, Any]]:
     return [item.model_dump() for item in _get_repo().get_skill_frequency(limit)]
 
 
+@mcp.tool(annotations=_READONLY)
+def list_ranked_resumes(job_description: str, limit: int = 25, offset: int = 0,
+                         skill_match_threshold: int | None = None,
+                         skills_weight: float | None = None,
+                         keyword_weight: float | None = None) -> dict[str, Any]:
+    """Rank every resume in the collection by how well it matches a pasted job description
+    (a lightweight ATS-style match check), best match first.
+
+    Combines two signals into overall_score for each resume:
+    - skills_score: fraction of the resume's badge skills that are (fuzzy-)mentioned in the
+      job description (handles format variants like "JS"/"JavaScript", "k8s"/"Kubernetes",
+      "Postgres"/"PostgreSQL").
+    - keyword_score: broader overlap between significant job-description keywords and the
+      resume's full text (professional statement, education, and work experience — company,
+      position, and achievement text), after basic English stopword filtering.
+    overall_score defaults to a 60/40 weighted blend of skills_score and keyword_score (skills
+    weighted higher as a more precise, curated signal); pass skills_weight/keyword_weight to
+    change the blend for a given call. All three scores are 0-100.
+
+    skill_match_threshold (default 85, 0-100) controls how strict the fuzzy skill matching is —
+    lower it to catch looser matches, raise it to require closer matches. Server-wide defaults
+    for all three of these can also be set via the ATS_SKILL_MATCH_THRESHOLD, ATS_SKILLS_WEIGHT,
+    and ATS_KEYWORD_WEIGHT environment variables; an explicit argument always overrides the
+    default for that call.
+
+    Each result includes: id, first_name, last_name, overall_score, skills_score, keyword_score,
+    matched_skills (resume skills found in the job description), and missing_skills (significant
+    job-description terms not covered by any resume skill). Results are sorted by overall_score
+    descending. Response includes total_count, items, has_more, next_offset, and message for
+    pagination.
+    Returns {"error": ...} if job_description is empty, if skill_match_threshold/weights are out
+    of range, or if skills_weight and keyword_weight are both 0.
+
+    Args:
+        job_description: Full text of the job description to rank resumes against
+        limit: Maximum number of results to return (default 25)
+        offset: Number of results to skip for pagination (default 0)
+        skill_match_threshold: Optional override (0-100) for the fuzzy skill-match cutoff (default 85, or ATS_SKILL_MATCH_THRESHOLD)
+        skills_weight: Optional override for the skills_score weight in overall_score (default 0.6, or ATS_SKILLS_WEIGHT)
+        keyword_weight: Optional override for the keyword_score weight in overall_score (default 0.4, or ATS_KEYWORD_WEIGHT)
+    Example: list_ranked_resumes("Senior backend engineer... Python, Kubernetes, distributed systems...")
+    """
+    return _safe_search(_get_repo().list_ranked_resumes, job_description=job_description,
+                         limit=limit, offset=offset, skill_match_threshold=skill_match_threshold,
+                         skills_weight=skills_weight, keyword_weight=keyword_weight)
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
     transport = os.environ.get("FASTMCP_TRANSPORT", "stdio")

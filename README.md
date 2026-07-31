@@ -11,7 +11,7 @@ An MCP server that gives Claude (or any MCP client) structured, searchable acces
 
 Job seekers accumulate document sprawl fast: multiple resume versions tailored to different roles, cover letter drafts, reference sheets. Manually digging through them to draft a new application is tedious. Point this server at your resume folder and Claude can answer questions like *"which of my resumes highlights Kubernetes experience?"*, *"what achievements have I listed across my backend roles?"*, or *"draft a cover letter drawing from my work at Acme Corp"* — without you pasting anything.
 
-The server parses each document into structured data (contact info, work history, education, skills, side projects) and exposes 19 tools covering full-text search, skill lookup, company and role queries, achievement mining, education search, collection analytics, and more. Files are watched and re-indexed automatically, so edits to your documents are reflected immediately.
+The server parses each document into structured data (contact info, work history, education, skills, side projects) and exposes 20 tools covering full-text search, skill lookup, company and role queries, achievement mining, education search, ATS-style job-match ranking, collection analytics, and more. Files are watched and re-indexed automatically, so edits to your documents are reflected immediately.
 
 ---
 
@@ -26,6 +26,7 @@ The server parses each document into structured data (contact info, work history
 - **Uniform pagination** — every list-style tool returns the same `total_count` / `items` / `has_more` / `next_offset` / `message` envelope, with validated `limit`/`offset` and a 200-item cap.
 - **Unified error shape** — every failure returns `{"error": "..."}`, so callers only need to check for one shape regardless of which tool they called.
 - **Collection analytics** — `get_collection_stats` and `get_skill_frequency` surface aggregate counts and cross-resume skill popularity.
+- **ATS-style job-match ranking** — `list_ranked_resumes` scores every resume against a pasted job description (fuzzy skill matching plus keyword coverage) and ranks them best-match-first; match strictness and score weighting are tunable per call.
 - **Read-only and safe by construction** — every tool is annotated `readOnlyHint` / `idempotentHint` / `openWorldHint: false`; nothing mutates your files or reaches outside the local document collection.
 - **Flexible deployment** — run over stdio or HTTP, standalone or via Docker/Docker Compose with CORS support, configured through environment variables or a `.env` file.
 
@@ -35,7 +36,7 @@ See [MCP Tools](#mcp-tools) below for the full list of tools this exposes. For b
 
 ## Quick Start
 
-Give Claude structured access to your resume collection. The server parses your documents on startup and exposes 19 tools for searching by name, company, skill, education, side project, or full text, plus analytics tools for skill frequency and collection statistics — with automatic hot-reload when files change.
+Give Claude structured access to your resume collection. The server parses your documents on startup and exposes 20 tools for searching by name, company, skill, education, side project, or full text, ranking resumes against a job description, plus analytics tools for skill frequency and collection statistics — with automatic hot-reload when files change.
 
 **Try it immediately with the included sample resumes:**
 
@@ -342,7 +343,7 @@ Every tool returns a dict. On failure, the dict is exactly `{"error": "<message>
 
 ## MCP Tools
 
-19 tools are exposed, covering full-text search, skill lookup, company and role queries, achievement mining, education search, collection analytics, and more. Every tool is read-only (`readOnlyHint: true`) — none mutate state or reach outside the local document collection (`openWorldHint: false`).
+20 tools are exposed, covering full-text search, skill lookup, company and role queries, achievement mining, education search, ATS-style job-match ranking, collection analytics, and more. Every tool is read-only (`readOnlyHint: true`) — none mutate state or reach outside the local document collection (`openWorldHint: false`).
 
 | Tool | Description |
 |---|---|
@@ -356,6 +357,7 @@ Every tool returns a dict. On failure, the dict is exactly `{"error": "<message>
 | `get_badge_skill` | A single badge skill by ID |
 | `search_resumes_by_skill` | Find which resumes list one or more given badge skills (accepts a string or a list) |
 | `get_skill_frequency` | Badge skills ranked by how many resumes list them |
+| `list_ranked_resumes` | Rank every resume against a pasted job description (fuzzy skill match + keyword coverage) |
 | `list_work_experiences` | List work experiences, optionally scoped to a resume, current-only, and/or a keyword query |
 | `get_work_experience` | A single work experience entry with its achievement bullets |
 | `list_achievements` | List achievement bullets, optionally scoped to a resume and/or a keyword query |
